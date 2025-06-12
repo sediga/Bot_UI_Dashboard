@@ -27,7 +27,7 @@ function App() {
     await fetch('http://localhost:8000/api/stop', { method: 'POST' });
     fetchStatus();
     loadLogs();
-    setActions([]); // clears previous session logs from UI
+    setActions([]);
   };
 
   const loadLogs = async () => {
@@ -67,36 +67,34 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
-      <h1 className="text-2xl font-bold mb-4">BotMaster Recorder Dashboard</h1>
+      <h1 className="text-3xl font-semibold mb-6 text-indigo-700">BotFlows</h1>
 
-      <div className="mb-6 flex items-center gap-4">
+      <div className="mb-6 bg-white shadow rounded-xl p-4 flex flex-wrap items-center gap-4">
         <input
           type="text"
           value={inputUrl}
           onChange={e => setInputUrl(e.target.value)}
-          className="border p-2 w-96"
+          className="border border-gray-300 rounded px-3 py-2 w-80 shadow-sm"
           placeholder="https://example.com"
         />
         <button
           onClick={startRecording}
-          className="px-4 py-2 bg-green-600 text-white rounded"
+          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md shadow"
         >
           Start
         </button>
         <button
           onClick={stopRecording}
-          className="px-4 py-2 bg-red-600 text-white rounded"
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md shadow"
         >
           Stop
         </button>
-        <span className="text-sm">
-          {status.running
-            ? `Recording: ${status.url}`
-            : 'No recording in progress'}
+        <span className="text-sm text-gray-600">
+          {status.running ? `Recording: ${status.url}` : 'No recording in progress'}
         </span>
-        {/* <span className="text-lg font-semibold mb-2">Replay by URL</span> */}
+
         <select
-          className="border p-2 mr-2"
+          className="border border-gray-300 rounded px-3 py-2 shadow-sm"
           value={selectedUrl}
           onChange={e => setSelectedUrl(e.target.value)}
         >
@@ -115,7 +113,7 @@ function App() {
             });
             alert('Replay started');
           }}
-          className="px-4 py-2 bg-indigo-600 text-white rounded"
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow"
         >
           Play
         </button>
