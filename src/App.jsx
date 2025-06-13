@@ -78,7 +78,12 @@ function App() {
     const statusInterval = setInterval(() => {
       fetchStatus();
       checkAgentStatus();
-    }, 5000);
+    // Fetch recorded URLs too
+      fetch('http://localhost:8000/api/recorded-urls')
+        .then(res => res.json())
+        .then(setRecordedUrls)
+        .catch(console.error);
+    }, 5000); // refresh every 5 seconds
 
     return () => clearInterval(statusInterval);
   }, []);

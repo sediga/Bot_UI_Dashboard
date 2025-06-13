@@ -18,7 +18,7 @@ export default function RunAgentButton() {
   };
 
   const handleDownload = () => {
-    const url = "https://botflows.app/downloads/BotflowsAgent.zip";
+    const url = "https://botflows.app/downloads/BotflowsAgentInstaller.exe";
     const link = document.createElement("a");
     link.href = url;
     link.download = "BotflowsAgent.zip";
