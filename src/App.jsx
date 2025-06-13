@@ -30,7 +30,7 @@ function App() {
   };
 
   const downloadAgent = () => {
-    const url = "https://github.com/sediga/Bot_Recorder/releases/download/v1.0.0/BotflowsAgent.zip";
+    const url = " https://botflows.app/downloads/botflowsagentsetup.exe";
     const link = document.createElement("a");
     link.href = url;
     link.download = "BotflowsAgent.zip";
