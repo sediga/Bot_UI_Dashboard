@@ -106,25 +106,27 @@ function App() {
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
       <h1 className="text-3xl font-semibold mb-6 text-indigo-700">BotFlows</h1>
 
-      {agentStatus !== "running" && (
-        <div className="mb-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-xl max-w-3xl">
-          <p className="mb-2 font-medium">Botflows Agent is not running.</p>
-          <button
-            onClick={downloadAgent}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow"
-          >
-            Download & Run Agent
-          </button>
-          {agentStatus === "downloaded" && (
-            <p className="text-sm text-gray-700 mt-2">
-              Downloaded. Please extract and double-click <code>api_server.exe</code>. We'll auto-detect when it starts.
+        {agentStatus !== "running" && (
+          <div className="mb-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-xl max-w-3xl">
+            <p className="mb-2 font-medium">Botflows Agent is not running.</p>
+            <button
+              onClick={downloadAgent}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow"
+            >
+              Download & Run Agent
+            </button>
+
+            {agentStatus === "downloaded" && (
+              <p className="text-sm text-gray-700 mt-2">
+                Download complete. Please run <code>BotflowsAgentInstaller.exe</code> and follow the setup. We’ll auto-detect when the agent starts.
+              </p>
+            )}
+
+            <p className="text-sm text-gray-600 mt-2">
+              ⚠️ If you see a warning, click <strong>“More Info” → “Run Anyway”</strong>. This app is safe and currently unsigned during early testing.
             </p>
-          )}
-          <p className="text-sm text-gray-600 mt-2">
-          ⚠️ If the download is flagged, click “Keep” or “Run Anyway.” The agent is safe and unsigned during early pilot testing.
-          </p>
-        </div>
-      )}
+          </div>
+        )}
 
       <div className="mb-6 bg-white shadow rounded-xl p-4 flex flex-wrap items-center gap-4">
         <input
