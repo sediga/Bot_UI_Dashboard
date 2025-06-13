@@ -5,11 +5,39 @@ function App() {
   const [actions, setActions] = useState([]);
   const [inputUrl, setInputUrl] = useState('');
   const [status, setStatus] = useState({ running: false, url: null });
+  const [agentStatus, setAgentStatus] = useState("idle");
+  const [recordedUrls, setRecordedUrls] = useState([]);
+  const [selectedUrl, setSelectedUrl] = useState('');
 
   const fetchStatus = async () => {
     const res = await fetch('http://localhost:8000/api/status');
     const data = await res.json();
     setStatus(data);
+  };
+
+  const checkAgentStatus = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/status");
+      const data = await res.json();
+      if (data.running !== undefined) {
+        setAgentStatus("running");
+      } else {
+        setAgentStatus("not_running");
+      }
+    } catch {
+      setAgentStatus("not_running");
+    }
+  };
+
+  const downloadAgent = () => {
+    const url = "https://github.com/sediga/Bot_Recorder/releases/download/v1.0.0/BotflowsAgent.zip";
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "BotflowsAgent.zip";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setAgentStatus("downloaded");
   };
 
   const startRecording = async () => {
@@ -45,7 +73,13 @@ function App() {
   useEffect(() => {
     loadLogs();
     fetchStatus();
-    const statusInterval = setInterval(fetchStatus, 2000);
+    checkAgentStatus();
+
+    const statusInterval = setInterval(() => {
+      fetchStatus();
+      checkAgentStatus();
+    }, 5000);
+
     return () => clearInterval(statusInterval);
   }, []);
 
@@ -56,8 +90,6 @@ function App() {
     }
   }, [status.running]);
 
-  const [recordedUrls, setRecordedUrls] = useState([]);
-  const [selectedUrl, setSelectedUrl] = useState('');
   useEffect(() => {
     fetch('http://localhost:8000/api/recorded-urls')
       .then(res => res.json())
@@ -68,6 +100,26 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-6">
       <h1 className="text-3xl font-semibold mb-6 text-indigo-700">BotFlows</h1>
+
+      {agentStatus !== "running" && (
+        <div className="mb-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-xl max-w-3xl">
+          <p className="mb-2 font-medium">Botflows Agent is not running.</p>
+          <button
+            onClick={downloadAgent}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow"
+          >
+            Download & Run Agent
+          </button>
+          {agentStatus === "downloaded" && (
+            <p className="text-sm text-gray-700 mt-2">
+              Downloaded. Please extract and double-click <code>api_server.exe</code>. We'll auto-detect when it starts.
+            </p>
+          )}
+          <p className="text-sm text-gray-600 mt-2">
+          ⚠️ If the download is flagged, click “Keep” or “Run Anyway.” The agent is safe and unsigned during early pilot testing.
+          </p>
+        </div>
+      )}
 
       <div className="mb-6 bg-white shadow rounded-xl p-4 flex flex-wrap items-center gap-4">
         <input
