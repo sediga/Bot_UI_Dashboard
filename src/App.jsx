@@ -30,7 +30,7 @@ function App() {
   };
 
   const downloadAgent = () => {
-    const url = " https://botflows.app/downloads/botflowsagentsetup.exe";
+    const url = " https://botflows.app/downloads/botflowsagentinstaller.exe";
     const link = document.createElement("a");
     link.href = url;
     link.download = "BotflowsAgent.zip";
@@ -165,12 +165,12 @@ function App() {
         <button
           onClick={async () => {
             if (!selectedUrl) return;
-            await fetch('http://localhost:8000/api/replay', {
+            fetch('http://localhost:8000/api/replay', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ url: selectedUrl })
             });
-            alert('Replay started');
+            alert('Replay started, browser bill be launched soon.');
           }}
           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow"
         >
