@@ -18,7 +18,7 @@ export default function RunAgentButton() {
   };
 
   const handleDownload = () => {
-    const url = "https://botflows.app/downloads/botflowsagentinstaller.exe";
+    const url = "https://github.com/sediga/Bot_UI_Dashboard/releases/download/V1.0.1/BotflowsAgentInstaller.exe";
     const link = document.createElement("a");
     link.href = url;
     link.download = "BotflowsAgentInstaller.exe";
