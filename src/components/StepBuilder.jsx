@@ -1,34 +1,156 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-export default function StepBuilder({ addStep, setCurrentLoop }) {
+export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
+  const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
-  const [loopSource, setLoopSource] = useState("");
+  const [loopName, setLoopName] = useState("");
+  const [saveFileName, setSaveFileName] = useState("");
+  const [showSavePopup, setShowSavePopup] = useState(false);
+  const [loopType, setLoopType] = useState("counter");
+  const [loopCount, setLoopCount] = useState(1);
 
-  const handleNavigate = () => {
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8000/ws/actions");
+
+    ws.onopen = () => console.log("✅ WebSocket connected");
+    ws.onerror = (err) => console.error("❌ WebSocket error", err);
+    ws.onclose = () => console.warn("⚠️ WebSocket closed");
+
+    ws.onmessage = (event) => {
+      try {
+        const raw = JSON.parse(event.data);
+        const step = {
+          id: crypto.randomUUID(),
+          type: "uiAction",
+          action: raw.action,
+          selector: raw.selector,
+          value: raw.value || null,
+          url: raw.url || null,
+          timestamp: raw.timestamp || Date.now(),
+        };
+        addStep(step);
+      } catch (err) {
+        console.error("Failed to parse WS message:", err);
+      }
+    };
+
+    return () => ws.close();
+  }, [addStep]);
+
+  const handleNavigate = async () => {
     if (!urlInput.trim()) return;
-    addStep({ type: "navigate", url: urlInput.trim() });
-    setUrlInput("");
+    const url = urlInput.trim();
+
+    try {
+      const res = await fetch("http://localhost:8000/api/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) throw new Error("Failed to start recording");
+
+      const navigateStep = {
+        id: crypto.randomUUID(),
+        type: "navigate",
+        url,
+      };
+      addStep(navigateStep);
+      setUrlInput("");
+    } catch (err) {
+      console.error("Error starting recording:", err);
+      alert("Could not start recording. Is agent running?");
+    }
+  };
+
+  const handleStop = async () => {
+    try {
+      await fetch("http://localhost:8000/api/stop", { method: "POST" });
+    } catch (err) {
+      console.error("Failed to stop recording", err);
+    }
   };
 
   const handleStartLoop = () => {
-    if (!loopSource.trim()) return;
+    if (!loopName.trim()) return;
+
+    const id = crypto.randomUUID();
+
+    const criteria = loopType === "counter"
+      ? { type: "counter", count: loopCount }
+      : { type: loopType };
+
     const loopStep = {
-      type: "dataLoop",
-      source: loopSource.trim(),
+      id,
+      type: "counterloop",
+      action: "counterloop",
+      source: loopName.trim(),
+      criteria,
       steps: [],
     };
+
     addStep(loopStep);
-    setCurrentLoop(loopStep);
-    setLoopSource("");
+    setCurrentLoopId(id);
+    setLoopName("");
   };
 
-  return (
-    <section className="col-span-2 bg-white p-6 rounded shadow space-y-6">
-      <h2 className="text-lg font-semibold">Add New Step</h2>
+  const handleStopLoop = () => {
+    setCurrentLoopId(null);
+  };
 
-      {/* Navigate Step */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">Navigate to URL</label>
+  const handleSave = async () => {
+    if (!saveFileName.trim()) return;
+    const cleanName = saveFileName.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    try {
+      const headers = {
+        "Content-Type": "application/json",
+        "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+      };
+      const res = await fetch("http://localhost:5000/api/flows/save", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ filename: cleanName, steps }),
+      });
+
+      const data = await res.json();
+      alert(data.message || "Flow saved.");
+    } catch (err) {
+      console.error("Failed to save flow:", err);
+      alert("Error saving flow");
+    }
+
+    setShowSavePopup(false);
+    setSaveFileName("");
+  };
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/status");
+      const data = await res.json();
+      if (data.running) setStatus("recording");
+      else if (data.replaying) setStatus("replaying");
+      else setStatus("idle");
+    } catch {
+      setStatus("disconnected");
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <section className="space-y-6">
+      <h2 className="text-lg font-semibold text-indigo-700">Flow Builder</h2>
+
+      <div className="text-sm text-gray-600">
+        Agent Status: <span className="font-medium">{status}</span>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-sm font-medium text-gray-700">Navigate to URL</label>
         <div className="flex space-x-2">
           <input
             type="text"
@@ -37,53 +159,93 @@ export default function StepBuilder({ addStep, setCurrentLoop }) {
             placeholder="https://example.com"
             className="flex-1 px-3 py-2 border rounded text-sm"
           />
-          <button
-            onClick={handleNavigate}
-            className="px-4 py-2 bg-indigo-600 text-white rounded shadow text-sm"
-          >
+          <button onClick={handleNavigate} className="px-4 py-2 bg-indigo-600 text-white rounded shadow text-sm">
             Go
           </button>
-        </div>
-      </div>
-
-      {/* Data Loop Step */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">Start Data-Driven Loop</label>
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            value={loopSource}
-            onChange={(e) => setLoopSource(e.target.value)}
-            placeholder="Loop source (e.g. patients)"
-            className="flex-1 px-3 py-2 border rounded text-sm"
-          />
-          <button
-            onClick={handleStartLoop}
-            className="px-4 py-2 bg-yellow-600 text-white rounded shadow text-sm"
-          >
-            Start Loop
+          <button onClick={handleStop} className="px-4 py-2 bg-gray-600 text-white rounded shadow text-sm">
+            Stop
           </button>
         </div>
       </div>
 
-      {/* Export Button */}
+      <div className="space-y-1">
+        <label className="text-sm font-medium text-gray-700">Add Data-Driven Step</label>
+        <div className="flex flex-col gap-2">
+          <div className="flex space-x-2">
+            <input
+              type="text"
+              value={loopName}
+              onChange={(e) => setLoopName(e.target.value)}
+              placeholder="Step name (e.g. patients)"
+              className="flex-1 px-3 py-2 border rounded text-sm"
+            />
+            <select
+              className="px-2 py-2 border rounded text-sm"
+              value={loopType}
+              onChange={(e) => setLoopType(e.target.value)}
+            >
+              <option value="counter">Counter</option>
+              <option value="rows">Rows</option>
+              <option value="api">API</option>
+            </select>
+          </div>
+
+          {loopType === "counter" && (
+            <input
+              type="number"
+              min={1}
+              value={loopCount}
+              onChange={(e) => setLoopCount(parseInt(e.target.value))}
+              className="w-32 px-3 py-2 border rounded text-sm"
+              placeholder="Loop count"
+            />
+          )}
+
+          <div className="flex space-x-2">
+            <button
+              onClick={handleStartLoop}
+              className="px-4 py-2 bg-yellow-600 text-white rounded shadow text-sm"
+            >
+              Add Step
+            </button>
+            <button
+              onClick={handleStopLoop}
+              className="px-4 py-2 bg-gray-500 text-white rounded shadow text-sm"
+            >
+              Stop
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="pt-4">
-        <button
-          onClick={() => {
-            const json = JSON.stringify(addStep.steps || [], null, 2);
-            const blob = new Blob([json], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "recorded_steps.json";
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-          className="px-6 py-2 bg-green-600 text-white rounded text-sm shadow"
-        >
-          Export JSON
+        <button onClick={() => setShowSavePopup(true)} className="px-6 py-2 bg-green-600 text-white rounded text-sm shadow">
+          Save Flow
         </button>
       </div>
+
+      {showSavePopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow space-y-4 w-96">
+            <h3 className="text-lg font-semibold text-gray-800">Save Flow As</h3>
+            <input
+              type="text"
+              value={saveFileName}
+              onChange={(e) => setSaveFileName(e.target.value)}
+              placeholder="flow-name"
+              className="w-full px-3 py-2 border rounded text-sm"
+            />
+            <div className="flex justify-end space-x-2">
+              <button onClick={() => setShowSavePopup(false)} className="px-4 py-2 text-sm rounded bg-gray-300">
+                Cancel
+              </button>
+              <button onClick={handleSave} className="px-4 py-2 text-sm rounded bg-indigo-600 text-white">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

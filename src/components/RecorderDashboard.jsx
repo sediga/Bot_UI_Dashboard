@@ -1,16 +1,20 @@
 import { useState } from "react";
-import StepList from "./StepList";
 import StepBuilder from "./StepBuilder";
+import StepList from "./StepList";
+import ReplayPanel from "./ReplayPanel";
 
 export default function RecorderDashboard() {
   const [steps, setSteps] = useState([]);
-  const [currentLoop, setCurrentLoop] = useState(null);
+  const [currentLoopId, setCurrentLoopId] = useState(null);
+  const [activeTab, setActiveTab] = useState("create");
 
   const addStep = (step) => {
-    if (currentLoop) {
+    if (currentLoopId) {
       setSteps((prev) =>
         prev.map((s) =>
-          s === currentLoop ? { ...s, steps: [...s.steps, step] } : s
+          s.id === currentLoopId
+            ? { ...s, steps: [...(s.steps || []), step] }
+            : s
         )
       );
     } else {
@@ -18,26 +22,55 @@ export default function RecorderDashboard() {
     }
   };
 
+  const clearSteps = () => {
+    setSteps([]);
+    setCurrentLoopId(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       {/* Header */}
       <header className="bg-white shadow px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-semibold text-indigo-600">Botflows Recorder</h1>
-        <div>
-          <button className="px-4 py-1 bg-green-600 text-white rounded shadow mr-2">
-            Start
+        <h1 className="text-xl font-semibold text-indigo-600">Botflows Dashboard</h1>
+        <nav className="space-x-4 text-sm font-medium">
+          <button
+            onClick={() => setActiveTab("create")}
+            className={activeTab === "create" ? "text-indigo-700" : "text-gray-500"}
+          >
+            Create Flow
           </button>
-          <button className="px-4 py-1 bg-red-600 text-white rounded shadow">
-            Stop
+          <button
+            onClick={() => setActiveTab("replay")}
+            className={activeTab === "replay" ? "text-indigo-700" : "text-gray-500"}
+          >
+            Replay
           </button>
-        </div>
+          <button
+            onClick={() => setActiveTab("config")}
+            className={activeTab === "config" ? "text-indigo-700" : "text-gray-500"}
+          >
+            Configure
+          </button>
+        </nav>
       </header>
 
       {/* Main Grid */}
-      <main className="grid grid-cols-3 gap-4 p-6">
-        <StepList steps={steps} setSteps={setSteps} />
-        <StepBuilder addStep={addStep} setCurrentLoop={setCurrentLoop} />
-      </main>
+      {activeTab === "create" && (
+        <main className="grid grid-cols-3 gap-4 p-6">
+          <StepBuilder
+            addStep={addStep}
+            setCurrentLoopId={setCurrentLoopId}
+            clearSteps={clearSteps}
+            steps={steps}
+          />
+          <StepList steps={steps} setSteps={setSteps} />
+        </main>
+      )}
+      {activeTab === "replay" && (
+        <main className="grid grid-cols-3 gap-4 p-6">
+          <ReplayPanel />
+        </main>
+      )}
     </div>
   );
 }
