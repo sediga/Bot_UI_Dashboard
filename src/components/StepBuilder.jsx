@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
+export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps, fetchFlows }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
   const [loopName, setLoopName] = useState("");
@@ -8,6 +8,26 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
   const [showSavePopup, setShowSavePopup] = useState(false);
   const [loopType, setLoopType] = useState("counter");
   const [loopCount, setLoopCount] = useState(1);
+  const [availableFlows, setAvailableFlows] = useState([]);
+  const [selectedFlow, setSelectedFlow] = useState("");
+
+  useEffect(() => {
+    const fetchFlows = async () => {
+      try {
+        const headers = {
+          "Content-Type": "application/json",
+          "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+        };
+        const res = await fetch("http://localhost:5000/api/flows/list", {headers: headers});
+        const data = await res.json();
+        if (Array.isArray(data)) setAvailableFlows(data);
+      } catch (err) {
+        console.error("Failed to fetch flow list", err);
+      }
+    };
+
+    fetchFlows();
+  }, []);
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8000/ws/actions");
@@ -42,6 +62,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
     const url = urlInput.trim();
 
     try {
+      clearSteps();
       const res = await fetch("http://localhost:8000/api/record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,7 +76,6 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
         url,
       };
       addStep(navigateStep);
-      setUrlInput("");
     } catch (err) {
       console.error("Error starting recording:", err);
       alert("Could not start recording. Is agent running?");
@@ -64,6 +84,8 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
 
   const handleStop = async () => {
     try {
+      clearSteps();
+      setUrlInput("");
       await fetch("http://localhost:8000/api/stop", { method: "POST" });
     } catch (err) {
       console.error("Failed to stop recording", err);
@@ -93,6 +115,26 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
     setLoopName("");
   };
 
+  const loadFlow = async (selectedFlow) => {
+    if (!selectedFlow) return;
+    try {
+      const headers = {
+        "Content-Type": "application/json",
+        "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+      };
+      const res = await fetch(`http://localhost:5000/api/flows/load/${selectedFlow}`, {headers: headers});
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error("Invalid flow data");
+
+      clearSteps();
+      data.forEach((step) => addStep(step));
+      alert("Flow loaded.");
+    } catch (err) {
+      console.error("Failed to load flow", err);
+      alert("Could not load flow");
+    }
+  }
+
   const handleStopLoop = () => {
     setCurrentLoopId(null);
   };
@@ -114,6 +156,9 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
 
       const data = await res.json();
       alert(data.message || "Flow saved.");
+      setUrlInput("");
+      clearSteps();
+      fetchFlows();
     } catch (err) {
       console.error("Failed to save flow:", err);
       alert("Error saving flow");
@@ -127,11 +172,12 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
     try {
       const res = await fetch("http://localhost:8000/api/status");
       const data = await res.json();
-      if (data.running) setStatus("recording");
+      if (data.recording) setStatus("recording");
       else if (data.replaying) setStatus("replaying");
-      else setStatus("idle");
+      else if (data.running) setStatus("idle");
+      else setStatus("stopped");
     } catch {
-      setStatus("disconnected");
+      setStatus("unknown");
     }
   };
 
@@ -222,6 +268,30 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps }) {
         <button onClick={() => setShowSavePopup(true)} className="px-6 py-2 bg-green-600 text-white rounded text-sm shadow">
           Save Flow
         </button>
+      </div>
+
+      <div className="space-y-2 pt-4">
+        <label className="text-sm font-medium text-gray-700">Load Existing Flow</label>
+        <div className="flex space-x-2">
+          <select
+            value={selectedFlow}
+            onChange={(e) => setSelectedFlow(e.target.value)}
+            className="flex-1 px-3 py-2 border rounded text-sm"
+          >
+            <option value="">-- Select Flow --</option>
+            {availableFlows.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={async () => await loadFlow(selectedFlow)}
+            className="px-4 py-2 bg-blue-600 text-white rounded text-sm shadow"
+          >
+            Load
+          </button>
+        </div>
       </div>
 
       {showSavePopup && (
