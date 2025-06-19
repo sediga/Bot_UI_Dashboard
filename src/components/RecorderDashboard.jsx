@@ -23,6 +23,14 @@ export default function RecorderDashboard() {
     }
   };
 
+  const updateStepWithImprovedSelector = (stepId, enrichedStep) => {
+    setSteps(prevSteps =>
+      prevSteps.map(step =>
+        step.id === stepId ? { ...step, ...enrichedStep } : step
+      )
+    );
+  };
+
   const clearSteps = () => {
     setSteps([]);
     setCurrentLoopId(null);
@@ -116,6 +124,7 @@ export default function RecorderDashboard() {
           setCurrentLoopId={setCurrentLoopId}
           clearSteps={clearSteps}  // <-- Add this line
           steps={steps}
+          updateStepWithImprovedSelector={updateStepWithImprovedSelector}
         />
           <StepList steps={steps} setSteps={setSteps} />
         </main>

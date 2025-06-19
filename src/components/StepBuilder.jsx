@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps }) {
+export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps, updateStepWithImprovedSelector }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
   const [loopName, setLoopName] = useState("");
@@ -11,6 +11,20 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
   const [availableFlows, setAvailableFlows] = useState([]);
   const [selectedFlow, setSelectedFlow] = useState("");
   
+  function getStepLabel(step) {
+    const action = step.action || "Action";
+    const text =
+      step.value ||
+      step.elementText ||
+      step.innerText ||
+      step.attributes?.["aria-label"] ||
+      step.attributes?.["data-testid"] ||
+      step.attributes?.["name"] ||
+      "Unknown";
+
+    return `${action.charAt(0).toUpperCase() + action.slice(1)}: ${text.trim()}`;
+  }
+
   useEffect(() => {
     const fetchFlows = async () => {
       try {
@@ -28,7 +42,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
 
     fetchFlows();
   }, []);
-
+  
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8000/ws/actions");
 
@@ -36,9 +50,10 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     ws.onerror = (err) => console.error("WebSocket error", err);
     ws.onclose = () => console.warn("⚠️ WebSocket closed");
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
         const raw = JSON.parse(event.data);
+
         const step = {
           id: crypto.randomUUID(),
           type: "uiAction",
@@ -47,15 +62,52 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
           value: raw.value || null,
           url: raw.url || null,
           timestamp: raw.timestamp || Date.now(),
+          label: getStepLabel(raw),
         };
+
+        // Immediately add to step list
         addStep(step);
+
+        // Enrich selector in background
+        try {
+          const headers = {
+            "Content-Type": "application/json",
+            "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+          };
+          const res = await fetch("http://localhost:5000/api/Selector/improve-selector", {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(raw),
+          });
+          const enriched = await res.json();
+
+          step.improvedSelector = enriched.bestSelector;
+          step.score = enriched.score;
+          step.reason = enriched.reason;
+
+          if (!step.label || step.label.includes("Unknown")) {
+            step.label = getStepLabel({ ...raw, ...enriched });
+          }
+
+          // Replace existing step with enriched version
+        updateStepWithImprovedSelector(step.id, {
+          improvedSelector: enriched.bestSelector,
+          score: enriched.score,
+          reason: enriched.reason,
+          label: step.label
+        });
+
+        } catch (err) {
+          console.warn("⚠️ Selector enrichment failed:", err);
+        }
       } catch (err) {
         console.error("Failed to parse WS message:", err);
       }
     };
 
     return () => ws.close();
-  }, [addStep]);
+  }, [addStep, updateStepWithImprovedSelector]);
+  // }, [addStep]);
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
@@ -176,6 +228,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
       else if (data.running) setStatus("idle");
       else setStatus("stopped");
     } catch {
+      
       setStatus("unknown");
     }
   };

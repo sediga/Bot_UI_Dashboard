@@ -49,7 +49,10 @@ const [expandedSteps, setExpandedSteps] = useState({});
               {step.type === "uiAction" && (
                 <div>
                   <span className="font-medium text-purple-600">{step.action}</span>{" "}
-                  → <code className="text-slate-700">{step.selector}</code>
+                  →{" "}
+                  <span className="text-slate-700">
+                    {step.label || <code>{step.selector}</code>}
+                  </span>
                   {step.value && (
                     <span className="text-green-600 ml-1">= "{step.value}"</span>
                   )}
