@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps, fetchFlows }) {
+export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
   const [loopName, setLoopName] = useState("");
@@ -10,7 +10,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
   const [loopCount, setLoopCount] = useState(1);
   const [availableFlows, setAvailableFlows] = useState([]);
   const [selectedFlow, setSelectedFlow] = useState("");
-
+  
   useEffect(() => {
     const fetchFlows = async () => {
       try {
@@ -32,8 +32,8 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8000/ws/actions");
 
-    ws.onopen = () => console.log("✅ WebSocket connected");
-    ws.onerror = (err) => console.error("❌ WebSocket error", err);
+    ws.onopen = () => console.log("WebSocket connected");
+    ws.onerror = (err) => console.error("WebSocket error", err);
     ws.onclose = () => console.warn("⚠️ WebSocket closed");
 
     ws.onmessage = (event) => {
@@ -158,7 +158,6 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
       alert(data.message || "Flow saved.");
       setUrlInput("");
       clearSteps();
-      fetchFlows();
     } catch (err) {
       console.error("Failed to save flow:", err);
       alert("Error saving flow");
