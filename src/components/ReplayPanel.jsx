@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import config from "../config"
 
 export default function ReplayPanel() {
   const [savedFlows, setSavedFlows] = useState([]);
@@ -10,9 +11,9 @@ export default function ReplayPanel() {
       try {
         const headers = {
           "Content-Type": "application/json",
-          "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+          "x-api-key": `${config.apiKey}` // Load from env later
         };
-        const res = await fetch("http://localhost:5000/api/flows/list", {
+        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, {
           headers: headers,
         });
         const data = await res.json();
@@ -32,14 +33,14 @@ export default function ReplayPanel() {
     try {
       const headers = {
         "Content-Type": "application/json",
-        "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+        "x-api-key": `${config.apiKey}` // Load from env later
       };
-        const apiRes = await fetch(`http://localhost:5000/api/flows/load/${encodeURIComponent(selectedFlow)}`  , {
+        const apiRes = await fetch(`${config.apiBaseUrl}/api/flows/load/${encodeURIComponent(selectedFlow)}`  , {
           headers: headers,
         });
         const apiData = await apiRes.json();
 
-      const res = await fetch("http://localhost:8000/api/replay", {
+      const res = await fetch(`${config.agentServerUrl}/api/replay`, {
         method: "POST",
         headers: headers,
         body: JSON.stringify(apiData), // adjust this key if needed

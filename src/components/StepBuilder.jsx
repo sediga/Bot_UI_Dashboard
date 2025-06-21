@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import config from "../config";
 
 export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps, updateStepWithImprovedSelector }) {
   const [status, setStatus] = useState("idle");
@@ -30,9 +31,9 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
       try {
         const headers = {
           "Content-Type": "application/json",
-          "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+          "x-api-key": `${config.apiKey}` // Load from env later
         };
-        const res = await fetch("http://localhost:5000/api/flows/list", {headers: headers});
+        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, {headers: headers});
         const data = await res.json();
         if (Array.isArray(data)) setAvailableFlows(data);
       } catch (err) {
@@ -44,7 +45,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
   }, []);
   
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8000/ws/actions");
+    const ws = new WebSocket(`${config.agentServerUrl}/ws/actions`);
 
     ws.onopen = () => console.log("WebSocket connected");
     ws.onerror = (err) => console.error("WebSocket error", err);
@@ -58,7 +59,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
           id: crypto.randomUUID(),
           type: "uiAction",
           action: raw.action,
-          selector: raw.selector,
+          selector: raw.improvedSelector || raw.selector,
           value: raw.value || null,
           url: raw.url || null,
           timestamp: raw.timestamp || Date.now(),
@@ -72,9 +73,9 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
         try {
           const headers = {
             "Content-Type": "application/json",
-            "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+            "x-api-key": `${config.apiKey}` // Load from env later
           };
-          const res = await fetch("http://localhost:5000/api/Selector/improve-selector", {
+          const res = await fetch(`${config.apiBaseUrl}/api/Selector/improve-selector`, {
             method: "POST",
             headers: headers,
             body: JSON.stringify(raw),
@@ -112,10 +113,14 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
     const url = urlInput.trim();
+    const formattedUrl = /^https?:\/\//i.test(url)
+      ? url
+      : `http://${url}`;
+    setUrlInput(formattedUrl);
 
     try {
       clearSteps();
-      const res = await fetch("http://localhost:8000/api/record", {
+      const res = await fetch(`${config.agentServerUrl}/api/record`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
@@ -138,7 +143,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     try {
       clearSteps();
       setUrlInput("");
-      await fetch("http://localhost:8000/api/stop", { method: "POST" });
+      await fetch(`${config.agentServerUrl}/api/stop`, { method: "POST" });
     } catch (err) {
       console.error("Failed to stop recording", err);
     }
@@ -172,14 +177,22 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     try {
       const headers = {
         "Content-Type": "application/json",
-        "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+        "x-api-key": `${config.apiKey}` // Load from env later
       };
-      const res = await fetch(`http://localhost:5000/api/flows/load/${selectedFlow}`, {headers: headers});
+      const res = await fetch(`${config.apiBaseUrl}/api/flows/load/${selectedFlow}`, {headers: headers});
       const data = await res.json();
       if (!Array.isArray(data)) throw new Error("Invalid flow data");
 
       clearSteps();
       data.forEach((step) => addStep(step));
+
+      // Look for the first navigation step to use its URL
+      const firstNavStep = data.find(step => step.type === "navigate");
+
+      if (firstNavStep?.url) {
+        setUrlInput(firstNavStep?.url);
+      }
+
       alert("Flow loaded.");
     } catch (err) {
       console.error("Failed to load flow", err);
@@ -198,9 +211,9 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     try {
       const headers = {
         "Content-Type": "application/json",
-        "x-api-key": "u42Q7gXgVx8fN1rLk9eJ0cGm5wYzA2dR" // Load from env later
+        "x-api-key": `${config.apiKey}` // Load from env later
       };
-      const res = await fetch("http://localhost:5000/api/flows/save", {
+      const res = await fetch(`${config.apiBaseUrl}/api/flows/save`, {
         method: "POST",
         headers: headers,
         body: JSON.stringify({ filename: cleanName, steps }),
@@ -221,7 +234,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/status");
+      const res = await fetch(`${config.agentServerUrl}/api/status`);
       const data = await res.json();
       if (data.recording) setStatus("recording");
       else if (data.replaying) setStatus("replaying");
@@ -234,9 +247,9 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
   };
 
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
+  fetchStatus();
+  const interval = setInterval(fetchStatus, 5000);
+  return () => clearInterval(interval);
   }, []);
 
   return (
@@ -259,9 +272,6 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
           />
           <button onClick={handleNavigate} className="px-4 py-2 bg-indigo-600 text-white rounded shadow text-sm">
             Go
-          </button>
-          <button onClick={handleStop} className="px-4 py-2 bg-gray-600 text-white rounded shadow text-sm">
-            Stop
           </button>
         </div>
       </div>

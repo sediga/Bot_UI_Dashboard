@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import StepBuilder from "./StepBuilder";
 import StepList from "./StepList";
 import ReplayPanel from "./ReplayPanel";
+import config from "../config"
 
 export default function RecorderDashboard() {
   const [steps, setSteps] = useState([]);
@@ -9,17 +10,71 @@ export default function RecorderDashboard() {
   const [activeTab, setActiveTab] = useState("create");
   const [agentStatus, setAgentStatus] = useState("unknown");
 
+  const actionPriority = (action) => {
+    if (action === "type") return 3;
+    if (action === "change") return 2;
+    if (action === "focus") return 1;
+    return 0;
+  };
+
+  const normalizeStep = (s) => ({
+    ...s,
+    selector: s.selector?.replace(/\\["']/g, "").trim(),
+    improvedSelector: s.improvedSelector?.replace(/\\["']/g, "").trim(),
+  });
+
+  const isSameActionGroup = (a1, a2) => {
+    const groupA = ["type", "change", "input"];
+    return groupA.includes(a1) && groupA.includes(a2);
+  };
+
+  const isRedundant = (prev, next) => {
+    return (
+      prev.selector === next.selector &&
+      prev.value === next.value &&
+      prev.url === next.url &&
+      (
+        prev.action === next.action ||
+        isSameActionGroup(prev.action, next.action)
+      )
+    );
+  };
+
   const addStep = (step) => {
+    const newStep = normalizeStep(step);
+
     if (currentLoopId) {
       setSteps((prev) =>
-        prev.map((s) =>
-          s.id === currentLoopId
-            ? { ...s, steps: [...(s.steps || []), step] }
-            : s
-        )
+        prev.map((s) => {
+          if (s.id !== currentLoopId) return s;
+          const group = s.steps || [];
+          const last = group[group.length - 1];
+          if (last && isRedundant(last, newStep)) {
+            const shouldReplace = actionPriority(newStep.action) > actionPriority(last.action);
+            if (shouldReplace) {
+              const updated = [...group];
+              updated[updated.length - 1] = newStep;
+              return { ...s, steps: updated };
+            }
+            return s; // skip adding
+          }
+          return { ...s, steps: [...group, newStep] };
+        })
       );
     } else {
-      setSteps((prev) => [...prev, step]);
+      setSteps((prev) => {
+        const last = prev[prev.length - 1];
+        if (last && isRedundant(last, newStep)) {
+          const shouldReplace = actionPriority(newStep.action) > actionPriority(last.action);
+          if (shouldReplace) {
+            const updated = [...prev];
+            updated[updated.length - 1] = newStep;
+            return updated;
+          }
+          return prev; // skip adding
+        }
+        return [...prev, newStep];
+      });
     }
   };
 
@@ -39,7 +94,7 @@ export default function RecorderDashboard() {
   useEffect(() => {
     const checkAgentStatus = async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/status");
+        const res = await fetch(`${config.agentServerUrl}/api/status`);
         const data = await res.json();
         console.log("Agent status response:", data); // Optional debug log
         setAgentStatus(data.running ? "running" : "stopped");
