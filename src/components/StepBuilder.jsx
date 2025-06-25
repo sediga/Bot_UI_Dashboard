@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import config from "../config";
 
-export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps, updateStepWithImprovedSelector }) {
+export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps, updateStepWithImprovedSelector, setPickedTarget }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
   const [loopName, setLoopName] = useState("");
@@ -54,6 +54,10 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     ws.onmessage = async (event) => {
       try {
         const raw = JSON.parse(event.data);
+        if (raw.type === "targetPicked") {
+          setPickedTarget(raw);
+          return;
+        }
 
         const step = {
           id: crypto.randomUUID(),
@@ -139,16 +143,6 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     }
   };
 
-  const handleStop = async () => {
-    try {
-      clearSteps();
-      setUrlInput("");
-      await fetch(`${config.agentServerUrl}/api/stop`, { method: "POST" });
-    } catch (err) {
-      console.error("Failed to stop recording", err);
-    }
-  };
-
   const handleStartLoop = () => {
     if (!loopName.trim()) return;
 
@@ -193,7 +187,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
         setUrlInput(firstNavStep?.url);
       }
 
-      alert("Flow loaded.");
+      // alert("Flow loaded.");
     } catch (err) {
       console.error("Failed to load flow", err);
       alert("Could not load flow");

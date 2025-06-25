@@ -1,18 +1,27 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
+import SmartStepWizard from "./SmartStepWizard";
+import Modal from "./SmartStepModal";
 
-export default function StepList({ steps, setSteps }) {
-const [expandedSteps, setExpandedSteps] = useState({});
+export default function StepList({ steps, setSteps, pickedTarget, setPickedTarget }) {
+  const [expandedSteps, setExpandedSteps] = useState({});
+  const [showSmartWizard, setShowSmartWizard] = useState(false);
+  const scrollRef = useRef(null);
 
-    useEffect(() => {
-    // Automatically expand all steps of type 'dataLoop'
+  useEffect(() => {
     const initialExpanded = {};
     steps.forEach((step, index) => {
-        if (step.type === "dataLoop") {
+      if (step.type === "dataLoop" || step.type === "counterloop") {
         initialExpanded[index] = true;
-        }
+      }
     });
     setExpandedSteps(initialExpanded);
-    }, [steps]);
+  }, [steps]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [steps]);
 
   const toggleExpand = (index) => {
     setExpandedSteps((prev) => ({
@@ -27,9 +36,22 @@ const [expandedSteps, setExpandedSteps] = useState({});
     setSteps(updated);
   };
 
+  const handleSmartStepCreated = (step) => {
+    setSteps((prev) => [...prev, step]);
+    setPickedTarget(null);
+    setShowSmartWizard(false);
+    console.log("Smart step created, closing wizard");
+  };
+
+  const handleCancelWizard = () => {
+    setPickedTarget(null);
+    setShowSmartWizard(false);
+  };
+
   return (
-    <section className="col-span-1 bg-white p-4 rounded shadow h-[80vh] overflow-y-auto">
+    <section className="col-span-1 bg-white p-4 rounded shadow h-[80vh] overflow-y-auto relative">
       <h2 className="text-lg font-semibold mb-4">Steps</h2>
+
       <ul className="space-y-2 text-sm">
         {steps.map((step, i) => (
           <li
@@ -37,7 +59,6 @@ const [expandedSteps, setExpandedSteps] = useState({});
             className="bg-slate-100 p-3 rounded shadow flex justify-between items-start"
           >
             <div className="flex-1 pr-2 space-y-1">
-              {/* Navigate Step */}
               {step.type === "navigate" && (
                 <div>
                   <span className="font-medium text-indigo-600">Navigate:</span>{" "}
@@ -45,7 +66,6 @@ const [expandedSteps, setExpandedSteps] = useState({});
                 </div>
               )}
 
-              {/* UI Action */}
               {step.type === "uiAction" && (
                 <div>
                   <span className="font-medium text-purple-600">{step.action}</span>{" "}
@@ -59,7 +79,6 @@ const [expandedSteps, setExpandedSteps] = useState({});
                 </div>
               )}
 
-              {/* Loop Step */}
               {step.type === "counterloop" && (
                 <div>
                   <div className="flex items-center justify-between">
@@ -74,7 +93,6 @@ const [expandedSteps, setExpandedSteps] = useState({});
                       {expandedSteps[i] ? "[−]" : "[+]"}
                     </button>
                   </div>
-
                   {expandedSteps[i] && step.steps?.length > 0 && (
                     <ul className="ml-4 pl-2 border-l border-gray-300 space-y-1 text-xs text-gray-700 mt-2">
                       {step.steps.map((sub, idx) => (
@@ -90,6 +108,13 @@ const [expandedSteps, setExpandedSteps] = useState({});
                   )}
                 </div>
               )}
+
+              {step.type === "dataLoop" && (
+                <div>
+                  <span className="font-medium text-cyan-700">Smart Step:</span>{" "}
+                  <code>{step.metadata?.gridId}</code>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col space-y-1 text-xs ml-2">
@@ -103,6 +128,27 @@ const [expandedSteps, setExpandedSteps] = useState({});
           </li>
         ))}
       </ul>
+
+      {/* Footer area */}
+      <div ref={scrollRef} className="mt-6 border-t pt-4">
+        <h3 className="text-md font-semibold mb-2">Insert Smart Step</h3>
+        <button
+          onClick={() => setShowSmartWizard(true)}
+          className="bg-blue-600 text-white px-3 py-1 rounded"
+        >
+          Add Smart Step
+        </button>
+      </div>
+
+      {showSmartWizard && (
+        <Modal onClose={handleCancelWizard}>
+          <SmartStepWizard
+            pickedTarget={pickedTarget}
+            onSmartStepCreated={handleSmartStepCreated}
+            onCancel={handleCancelWizard}
+          />
+        </Modal>
+      )}  
     </section>
   );
 }
