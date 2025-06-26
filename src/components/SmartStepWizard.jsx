@@ -32,7 +32,6 @@ export default function SmartStepWizard({ pickedTarget, onSmartStepCreated, onCa
     if (pickedTarget?.type === "targetPicked") {
       setIsPicking(false);
 
-      // pickedTarget.metadata.columnHeaders is now [{header, type}]
       const typedColumns = pickedTarget.metadata?.columnHeaders || [];
 
       setGridMeta({
@@ -41,10 +40,6 @@ export default function SmartStepWizard({ pickedTarget, onSmartStepCreated, onCa
       });
 
       setStep(2);
-
-      fetch(`${config.agentServerUrl}/api/target-pick-done`, {
-        method: "POST",
-      }).catch((err) => console.error("Failed to notify agent:", err));
     }
   }, [pickedTarget]);
 
@@ -73,7 +68,6 @@ export default function SmartStepWizard({ pickedTarget, onSmartStepCreated, onCa
     const rowSelector = `${gridSelector} div[role='row']`;
 
     const columnMappings = selectedColumns.map((headerName) => {
-      // Find index by header name in columnHeaders array of objects
       const colIndex = gridMeta.columnHeaders.findIndex(col => col.header === headerName);
       return {
         header: headerName,
@@ -94,15 +88,24 @@ export default function SmartStepWizard({ pickedTarget, onSmartStepCreated, onCa
       gridSelector,
       rowSelector,
       columnMappings,
-      filters, // filters array from FilterBuilder
+      filters,
       actionsPerRow,
     };
+
+      fetch(`${config.agentServerUrl}/api/target-pick-done`, {
+        method: "POST",
+      }).catch((err) => console.error("Failed to notify agent on cancel:", err));
 
     onSmartStepCreated(stepPayload);
     reset();
   };
 
   const handleCancel = () => {
+    if (isPicking) {
+      fetch(`${config.agentServerUrl}/api/target-pick-done`, {
+        method: "POST",
+      }).catch((err) => console.error("Failed to notify agent on cancel:", err));
+    }
     if (typeof onCancel === "function") {
       onCancel();
     }
@@ -120,7 +123,7 @@ export default function SmartStepWizard({ pickedTarget, onSmartStepCreated, onCa
   };
 
   return (
-    <div className="space-y-4 text-sm relative">
+    <div className="space-y-4 text-sm relative z-10">
       {step === 1 && (
         <div>
           <h3 className="text-md font-semibold mb-2">What type of smart step?</h3>
@@ -144,17 +147,19 @@ export default function SmartStepWizard({ pickedTarget, onSmartStepCreated, onCa
       )}
 
       {stepType === "grid" && isPicking && (
-        <div className="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center z-50 p-6 space-y-4 rounded-lg shadow-lg max-w-md mx-auto left-0 right-0 top-20">
-          <p className="text-lg font-semibold text-gray-700 text-center">
-            Now click on the grid on the page…
-          </p>
-          <button
-            onClick={handleCancel}
-            className="text-sm text-red-600 underline hover:text-red-800"
-            type="button"
-          >
-            Cancel
-          </button>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex flex-col items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm text-center space-y-4">
+            <p className="text-lg font-semibold text-gray-800">
+              Now click on the grid on the page…
+            </p>
+            <button
+              onClick={handleCancel}
+              className="text-sm text-red-600 underline hover:text-red-800"
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

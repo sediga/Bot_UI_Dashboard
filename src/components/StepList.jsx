@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import SmartStepWizard from "./SmartStepWizard";
 import Modal from "./SmartStepModal";
+import config from "../config";
 
 export default function StepList({ steps, setSteps, pickedTarget, setPickedTarget }) {
   const [expandedSteps, setExpandedSteps] = useState({});
@@ -46,6 +47,9 @@ export default function StepList({ steps, setSteps, pickedTarget, setPickedTarge
   const handleCancelWizard = () => {
     setPickedTarget(null);
     setShowSmartWizard(false);
+    fetch(`${config.agentServerUrl}/api/target-pick-done`, {
+      method: "POST",
+    }).catch((err) => console.error("Failed to notify agent on cancel:", err));
   };
 
   return (
@@ -146,6 +150,7 @@ export default function StepList({ steps, setSteps, pickedTarget, setPickedTarge
             pickedTarget={pickedTarget}
             onSmartStepCreated={handleSmartStepCreated}
             onCancel={handleCancelWizard}
+            onClose={handleCancelWizard}
           />
         </Modal>
       )}  
