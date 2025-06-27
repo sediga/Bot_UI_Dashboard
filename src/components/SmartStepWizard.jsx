@@ -7,7 +7,8 @@ export default function SmartStepWizard({
   pickedTarget,
   onSmartStepCreated,
   onCancel,
-  availableExtractSteps = []
+  availableExtractSteps = [],
+  currentLoopId, // Added to pass the currentLoopId
 }) {
   const [step, setStep] = useState(1);
   const [stepType, setStepType] = useState("");
@@ -15,7 +16,6 @@ export default function SmartStepWizard({
   const [gridMeta, setGridMeta] = useState(null);
   const [selectedColumns, setSelectedColumns] = useState([]);
   const [filters, setFilters] = useState([]);
-  const [rowAction, setRowAction] = useState("");
   const [loopCount, setLoopCount] = useState(3);
   const [selectedSource, setSelectedSource] = useState("");
   const [stepName, setStepName] = useState("");
@@ -23,14 +23,11 @@ export default function SmartStepWizard({
   const startGridPick = async () => {
     setIsPicking(true);
     try {
-      const res = await fetch(`${config.agentServerUrl}/api/target-pick-mode`, {
+      await fetch(`${config.agentServerUrl}/api/target-pick-mode`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "start" }),
       });
-      if (!res.ok) {
-        console.error("Failed to start grid pick mode:", res.statusText);
-      }
     } catch (err) {
       console.error("Error starting grid pick mode:", err);
     }
@@ -62,8 +59,8 @@ export default function SmartStepWizard({
         const el = temp.firstElementChild;
         if (el) gridSelector = getUniqueSelector(el);
       }
-      const rowSelector = `${gridSelector} div[role='row']`;
 
+      const rowSelector = `${gridSelector} div[role='row']`;
       const columnMappings = selectedColumns.map((headerName) => {
         const colIndex = gridMeta.columnHeaders.findIndex((col) => col.header === headerName);
         return {
@@ -82,23 +79,31 @@ export default function SmartStepWizard({
         columnMappings,
         filters,
       };
-    } else if (stepType === "loop-counter") {
+    }
+
+    else if (stepType === "loop-counter") {
+      const loopId = `loopstep_${Date.now()}`;
       stepPayload = {
-        id: `loopstep_${Date.now()}`,
-        type: "loop",
+        id: loopId,
+        type: "dataLoop",
         loopType: "counter",
         name: stepName,
         loopCount,
-        steps: [],
+        actionsPerRow: [],
+        parentId: currentLoopId, // Set parentId for loop
       };
-    } else if (stepType === "loop-dataset") {
+    }
+
+    else if (stepType === "loop-dataset") {
+      const loopId = `dataloopStep_${Date.now()}`;
       stepPayload = {
-        id: `dataloopStep_${Date.now()}`,
-        type: "loop",
+        id: loopId,
+        type: "dataLoop",
         loopType: "dataset",
         name: stepName,
         source: selectedSource,
-        steps: [],
+        actionsPerRow: [],
+        parentId: currentLoopId, // Set parentId for dataset loop
       };
     }
 
@@ -127,7 +132,6 @@ export default function SmartStepWizard({
     setGridMeta(null);
     setSelectedColumns([]);
     setFilters([]);
-    setRowAction("");
     setLoopCount(3);
     setSelectedSource("");
     setStepName("");

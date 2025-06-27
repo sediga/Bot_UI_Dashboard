@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import config from "../config";
 
-export default function StepBuilder({ addStep, currentLoopId, steps, clearSteps, updateStepWithImprovedSelector, setPickedTarget, setSteps }) {
+export default function StepBuilder({
+  addStep,
+  currentLoopId,
+  steps,
+  clearSteps,
+  updateStepWithImprovedSelector,
+  setPickedTarget,
+  setSteps,
+}) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
   const [loopName, setLoopName] = useState("");
@@ -70,20 +78,10 @@ export default function StepBuilder({ addStep, currentLoopId, steps, clearSteps,
           label: getStepLabel(raw),
         };
 
-        const loopId = currentLoopId;
-        if (loopId) {
-          setSteps(prev => {
-            return prev.map(s => {
-              if (s.id === loopId) {
-                const existing = s.actionsPerRow || [];
-                return { ...s, actionsPerRow: [...existing, step] };
-              }
-              return s;
-            });
-          });
-        } else {
-          addStep(step);
+        if (currentLoopId) {
+          step.parentId = currentLoopId;
         }
+        setSteps(prev => [...prev, step]);
 
         try {
           const headers = {
@@ -120,7 +118,7 @@ export default function StepBuilder({ addStep, currentLoopId, steps, clearSteps,
     };
 
     return () => ws.close();
-  }, [addStep, updateStepWithImprovedSelector, setSteps]);
+  }, [addStep, updateStepWithImprovedSelector, setSteps, currentLoopId]);
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
@@ -169,9 +167,6 @@ export default function StepBuilder({ addStep, currentLoopId, steps, clearSteps,
 
     addStep(loopStep);
     setLoopName("");
-  };
-
-  const handleStopLoop = () => {
   };
 
   const handleSave = async () => {
@@ -246,131 +241,76 @@ export default function StepBuilder({ addStep, currentLoopId, steps, clearSteps,
   }, []);
 
   return (
-    <section className="space-y-6">
-      <h2 className="text-lg font-semibold text-indigo-700">Flow Builder</h2>
-
-      <div className="text-sm text-gray-600">
-        Agent Status: <span className="font-medium">{status}</span>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium text-gray-700">Navigate to URL</label>
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="https://example.com"
-            className="flex-1 px-3 py-2 border rounded text-sm"
-          />
-          <button onClick={handleNavigate} className="px-4 py-2 bg-indigo-600 text-white rounded shadow text-sm">
-            Go
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium text-gray-700">Add Data-Driven Step</label>
-        <div className="flex flex-col gap-2">
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              value={loopName}
-              onChange={(e) => setLoopName(e.target.value)}
-              placeholder="Step name (e.g. patients)"
-              className="flex-1 px-3 py-2 border rounded text-sm"
-            />
-            <select
-              className="px-2 py-2 border rounded text-sm"
-              value={loopType}
-              onChange={(e) => setLoopType(e.target.value)}
-            >
-              <option value="counter">Counter</option>
-              <option value="rows">Rows</option>
-              <option value="api">API</option>
-            </select>
-          </div>
-
-          {loopType === "counter" && (
-            <input
-              type="number"
-              min={1}
-              value={loopCount}
-              onChange={(e) => setLoopCount(parseInt(e.target.value))}
-              className="w-32 px-3 py-2 border rounded text-sm"
-              placeholder="Loop count"
-            />
-          )}
-
-          <div className="flex space-x-2">
-            <button
-              onClick={handleStartLoop}
-              className="px-4 py-2 bg-yellow-600 text-white rounded shadow text-sm"
-            >
-              Add Step
-            </button>
-            <button
-              onClick={handleStopLoop}
-              className="px-4 py-2 bg-gray-500 text-white rounded shadow text-sm"
-            >
-              Stop
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="pt-4">
-        <button onClick={() => setShowSavePopup(true)} className="px-6 py-2 bg-green-600 text-white rounded text-sm shadow">
-          Save Flow
+    <div className="space-y-4">
+      <div className="flex gap-2 items-center">
+        <input
+          type="text"
+          className="border p-2 w-full rounded"
+          placeholder="Enter URL..."
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+        />
+        <button
+          onClick={handleNavigate}
+          className="bg-blue-600 text-white px-3 py-2 rounded"
+        >
+          Record
+        </button>
+        <button
+          onClick={() => setShowSavePopup(true)}
+          className="bg-green-600 text-white px-3 py-2 rounded"
+        >
+          Save
         </button>
       </div>
 
-      <div className="space-y-2 pt-4">
-        <label className="text-sm font-medium text-gray-700">Load Existing Flow</label>
-        <div className="flex space-x-2">
-          <select
-            value={selectedFlow}
-            onChange={(e) => setSelectedFlow(e.target.value)}
-            className="flex-1 px-3 py-2 border rounded text-sm"
-          >
-            <option value="">-- Select Flow --</option>
-            {availableFlows.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={async () => await loadFlow(selectedFlow)}
-            className="px-4 py-2 bg-blue-600 text-white rounded text-sm shadow"
-          >
-            Load
-          </button>
-        </div>
+      <div className="text-sm text-gray-500">Status: {status}</div>
+
+      <div className="border-t pt-4">
+        <label className="block mb-1 font-medium">Load Flow:</label>
+        <select
+          className="border rounded p-2 w-full"
+          value={selectedFlow}
+          onChange={(e) => {
+            setSelectedFlow(e.target.value);
+            loadFlow(e.target.value);
+          }}
+        >
+          <option value="">Select a flow</option>
+          {availableFlows.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
       </div>
 
       {showSavePopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow space-y-4 w-96">
-            <h3 className="text-lg font-semibold text-gray-800">Save Flow As</h3>
-            <input
-              type="text"
-              value={saveFileName}
-              onChange={(e) => setSaveFileName(e.target.value)}
-              placeholder="flow-name"
-              className="w-full px-3 py-2 border rounded text-sm"
-            />
-            <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowSavePopup(false)} className="px-4 py-2 text-sm rounded bg-gray-300">
-                Cancel
-              </button>
-              <button onClick={handleSave} className="px-4 py-2 text-sm rounded bg-indigo-600 text-white">
-                Save
-              </button>
-            </div>
+        <div className="bg-white shadow rounded p-4 space-y-2 border">
+          <label className="block font-medium">Save As:</label>
+          <input
+            type="text"
+            className="border p-2 w-full rounded"
+            value={saveFileName}
+            onChange={(e) => setSaveFileName(e.target.value)}
+            placeholder="flow_name"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              className="bg-green-600 text-white px-4 py-1 rounded"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setShowSavePopup(false)}
+              className="bg-gray-400 text-white px-4 py-1 rounded"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }

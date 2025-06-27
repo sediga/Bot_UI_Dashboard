@@ -45,50 +45,13 @@ export default function RecorderDashboard() {
   const addStep = (step) => {
     const newStep = normalizeStep(step);
 
-    if (currentLoopId) {
-      setSteps((prev) =>
-        prev.map((s) => {
-          if (s.id !== currentLoopId) return s;
-
-          // ensure actionsPerRow exists for compatibility with both formats
-          const group = s.actionsPerRow || s.steps || [];
-          const last = group[group.length - 1];
-
-          const updatedGroup = (() => {
-            if (last && isRedundant(last, newStep)) {
-              const shouldReplace = actionPriority(newStep.action) > actionPriority(last.action);
-              if (shouldReplace) {
-                const updated = [...group];
-                updated[updated.length - 1] = newStep;
-                return updated;
-              }
-              return group;
-            }
-            return [...group, newStep];
-          })();
-
-          return {
-            ...s,
-            actionsPerRow: updatedGroup, // preferred new format
-            steps: updatedGroup // legacy compatibility
-          };
-        })
-      );
-    } else {
-      setSteps((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && isRedundant(last, newStep)) {
-          const shouldReplace = actionPriority(newStep.action) > actionPriority(last.action);
-          if (shouldReplace) {
-            const updated = [...prev];
-            updated[updated.length - 1] = newStep;
-            return updated;
-          }
-          return prev;
-        }
-        return [...prev, newStep];
-      });
+    // If the step is inside a loop, set parentId to the current loop's ID
+    if (step.parentId) {
+      newStep.parentId = step.parentId; // Ensure parentId is properly set
     }
+
+    // Add to the steps list
+    setSteps((prev) => [...prev, newStep]);
   };
 
   const updateStepWithImprovedSelector = (stepId, enrichedStep) => {
