@@ -1,3 +1,4 @@
+// RecorderDashboard.jsx
 import { useEffect, useState } from "react";
 import StepBuilder from "./StepBuilder";
 import StepList from "./StepList";
@@ -48,18 +49,29 @@ export default function RecorderDashboard() {
       setSteps((prev) =>
         prev.map((s) => {
           if (s.id !== currentLoopId) return s;
-          const group = s.steps || [];
+
+          // ensure actionsPerRow exists for compatibility with both formats
+          const group = s.actionsPerRow || s.steps || [];
           const last = group[group.length - 1];
-          if (last && isRedundant(last, newStep)) {
-            const shouldReplace = actionPriority(newStep.action) > actionPriority(last.action);
-            if (shouldReplace) {
-              const updated = [...group];
-              updated[updated.length - 1] = newStep;
-              return { ...s, steps: updated };
+
+          const updatedGroup = (() => {
+            if (last && isRedundant(last, newStep)) {
+              const shouldReplace = actionPriority(newStep.action) > actionPriority(last.action);
+              if (shouldReplace) {
+                const updated = [...group];
+                updated[updated.length - 1] = newStep;
+                return updated;
+              }
+              return group;
             }
-            return s;
-          }
-          return { ...s, steps: [...group, newStep] };
+            return [...group, newStep];
+          })();
+
+          return {
+            ...s,
+            actionsPerRow: updatedGroup, // preferred new format
+            steps: updatedGroup // legacy compatibility
+          };
         })
       );
     } else {
@@ -97,7 +109,17 @@ export default function RecorderDashboard() {
       try {
         const res = await fetch(`${config.agentServerUrl}/api/status`);
         const data = await res.json();
-        setAgentStatus(data.running ? "running" : "stopped");
+        if (data.replaying) {
+          setAgentStatus("replaying");
+        } else if (data.recording) {
+          setAgentStatus("recording");
+        } else if (data.running) {
+          setAgentStatus("running");
+        } else if (data.stopped) {
+          setAgentStatus("stopped");
+        } else {
+          setAgentStatus("idle");
+        }
       } catch (err) {
         console.error("Error checking agent status:", err);
         setAgentStatus("unknown");
@@ -170,17 +192,20 @@ export default function RecorderDashboard() {
         <main className="grid grid-cols-3 gap-4 p-6">
           <StepBuilder
             addStep={addStep}
-            setCurrentLoopId={setCurrentLoopId}
             clearSteps={clearSteps}
             steps={steps}
             updateStepWithImprovedSelector={updateStepWithImprovedSelector}
             setPickedTarget={setPickedTarget}
+            currentLoopId={currentLoopId}
+            setSteps={setSteps}
           />
           <StepList
             steps={steps}
             setSteps={setSteps}
             pickedTarget={pickedTarget}
-            setPickedTarget={setPickedTarget} // <-- This line fixes the error
+            setPickedTarget={setPickedTarget}
+            agentStatus={agentStatus}
+            setCurrentLoopId={setCurrentLoopId}
           />
         </main>
       )}

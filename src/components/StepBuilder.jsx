@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import config from "../config";
 
-export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSteps, updateStepWithImprovedSelector, setPickedTarget }) {
+export default function StepBuilder({ addStep, currentLoopId, steps, clearSteps, updateStepWithImprovedSelector, setPickedTarget, setSteps }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
   const [loopName, setLoopName] = useState("");
@@ -11,7 +11,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
   const [loopCount, setLoopCount] = useState(1);
   const [availableFlows, setAvailableFlows] = useState([]);
   const [selectedFlow, setSelectedFlow] = useState("");
-  
+
   function getStepLabel(step) {
     const action = step.action || "Action";
     const text =
@@ -31,9 +31,9 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
       try {
         const headers = {
           "Content-Type": "application/json",
-          "x-api-key": `${config.apiKey}` // Load from env later
+          "x-api-key": `${config.apiKey}`
         };
-        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, {headers: headers});
+        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, { headers });
         const data = await res.json();
         if (Array.isArray(data)) setAvailableFlows(data);
       } catch (err) {
@@ -43,7 +43,7 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
 
     fetchFlows();
   }, []);
-  
+
   useEffect(() => {
     const ws = new WebSocket(`${config.agentServerUrl}/ws/actions`);
 
@@ -70,18 +70,29 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
           label: getStepLabel(raw),
         };
 
-        // Immediately add to step list
-        addStep(step);
+        const loopId = currentLoopId;
+        if (loopId) {
+          setSteps(prev => {
+            return prev.map(s => {
+              if (s.id === loopId) {
+                const existing = s.actionsPerRow || [];
+                return { ...s, actionsPerRow: [...existing, step] };
+              }
+              return s;
+            });
+          });
+        } else {
+          addStep(step);
+        }
 
-        // Enrich selector in background
         try {
           const headers = {
             "Content-Type": "application/json",
-            "x-api-key": `${config.apiKey}` // Load from env later
+            "x-api-key": `${config.apiKey}`,
           };
           const res = await fetch(`${config.apiBaseUrl}/api/Selector/improve-selector`, {
             method: "POST",
-            headers: headers,
+            headers,
             body: JSON.stringify(raw),
           });
           const enriched = await res.json();
@@ -94,14 +105,12 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
             step.label = getStepLabel({ ...raw, ...enriched });
           }
 
-          // Replace existing step with enriched version
-        updateStepWithImprovedSelector(step.id, {
-          improvedSelector: enriched.bestSelector,
-          score: enriched.score,
-          reason: enriched.reason,
-          label: step.label
-        });
-
+          updateStepWithImprovedSelector(step.id, {
+            improvedSelector: enriched.bestSelector,
+            score: enriched.score,
+            reason: enriched.reason,
+            label: step.label,
+          });
         } catch (err) {
           console.warn("⚠️ Selector enrichment failed:", err);
         }
@@ -111,15 +120,12 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     };
 
     return () => ws.close();
-  }, [addStep, updateStepWithImprovedSelector]);
-  // }, [addStep]);
+  }, [addStep, updateStepWithImprovedSelector, setSteps]);
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
     const url = urlInput.trim();
-    const formattedUrl = /^https?:\/\//i.test(url)
-      ? url
-      : `http://${url}`;
+    const formattedUrl = /^https?:\/\//i.test(url) ? url : `http://${url}`;
     setUrlInput(formattedUrl);
 
     try {
@@ -162,40 +168,10 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     };
 
     addStep(loopStep);
-    setCurrentLoopId(id);
     setLoopName("");
   };
 
-  const loadFlow = async (selectedFlow) => {
-    if (!selectedFlow) return;
-    try {
-      const headers = {
-        "Content-Type": "application/json",
-        "x-api-key": `${config.apiKey}` // Load from env later
-      };
-      const res = await fetch(`${config.apiBaseUrl}/api/flows/load/${selectedFlow}`, {headers: headers});
-      const data = await res.json();
-      if (!Array.isArray(data)) throw new Error("Invalid flow data");
-
-      clearSteps();
-      data.forEach((step) => addStep(step));
-
-      // Look for the first navigation step to use its URL
-      const firstNavStep = data.find(step => step.type === "navigate");
-
-      if (firstNavStep?.url) {
-        setUrlInput(firstNavStep?.url);
-      }
-
-      // alert("Flow loaded.");
-    } catch (err) {
-      console.error("Failed to load flow", err);
-      alert("Could not load flow");
-    }
-  }
-
   const handleStopLoop = () => {
-    setCurrentLoopId(null);
   };
 
   const handleSave = async () => {
@@ -205,11 +181,11 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     try {
       const headers = {
         "Content-Type": "application/json",
-        "x-api-key": `${config.apiKey}` // Load from env later
+        "x-api-key": `${config.apiKey}`
       };
       const res = await fetch(`${config.apiBaseUrl}/api/flows/save`, {
         method: "POST",
-        headers: headers,
+        headers,
         body: JSON.stringify({ filename: cleanName, steps }),
       });
 
@@ -226,6 +202,30 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
     setSaveFileName("");
   };
 
+  const loadFlow = async (selectedFlow) => {
+    if (!selectedFlow) return;
+    try {
+      const headers = {
+        "Content-Type": "application/json",
+        "x-api-key": `${config.apiKey}`
+      };
+      const res = await fetch(`${config.apiBaseUrl}/api/flows/load/${selectedFlow}`, { headers });
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error("Invalid flow data");
+
+      clearSteps();
+      data.forEach((step) => addStep(step));
+
+      const firstNavStep = data.find(step => step.type === "navigate");
+      if (firstNavStep?.url) {
+        setUrlInput(firstNavStep.url);
+      }
+    } catch (err) {
+      console.error("Failed to load flow", err);
+      alert("Could not load flow");
+    }
+  };
+
   const fetchStatus = async () => {
     try {
       const res = await fetch(`${config.agentServerUrl}/api/status`);
@@ -235,15 +235,14 @@ export default function StepBuilder({ addStep, setCurrentLoopId, steps, clearSte
       else if (data.running) setStatus("idle");
       else setStatus("stopped");
     } catch {
-      
       setStatus("unknown");
     }
   };
 
   useEffect(() => {
-  fetchStatus();
-  const interval = setInterval(fetchStatus, 5000);
-  return () => clearInterval(interval);
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
