@@ -23,6 +23,7 @@ export default function RecorderDashboard() {
     ...s,
     selector: s.selector?.replace(/\\["']/g, "").trim(),
     improvedSelector: s.improvedSelector?.replace(/\\["']/g, "").trim(),
+    devToolsSelector: s.devToolsSelector?.replace(/\\["']/g, "").trim(),
   });
 
   const isSameActionGroup = (a1, a2) => {
