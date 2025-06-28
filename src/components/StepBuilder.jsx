@@ -71,48 +71,36 @@ export default function StepBuilder({
           id: crypto.randomUUID(),
           type: "uiAction",
           action: raw.action,
-          selector: raw.selector,
-          improvedSelector: raw.improvedSelector,
-          devToolsSelector: raw.devToolsSelector,
           value: raw.value || null,
           url: raw.url || null,
           timestamp: raw.timestamp || Date.now(),
           label: getStepLabel(raw),
+          selector: raw.selector, // preserved for player
+          selectors: raw.selectors, // preserved for player
+          improvedSelector: raw.improvedSelector, // if agent sends it
+          devToolsSelector: raw.devToolsSelector, // if agent sends it
+          tagName: raw.tagName,
+          attributes: raw.attributes || {},
+          innerText: raw.innerText,
+          elementText: raw.elementText,
+          classList: raw.classList || [],
+          boundingBox: raw.boundingBox,
         };
 
         if (currentLoopId) {
           step.parentId = currentLoopId;
         }
+
         setSteps(prev => [...prev, step]);
 
         try {
-          const headers = {
-            "Content-Type": "application/json",
-            "x-api-key": `${config.apiKey}`,
-          };
-          const res = await fetch(`${config.apiBaseUrl}/api/Selector/improve-selector`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(raw),
-          });
-          const enriched = await res.json();
-
-          step.improvedSelector = enriched.bestSelector;
-          step.score = enriched.score;
-          step.reason = enriched.reason;
-
           if (!step.label || step.label.includes("Unknown")) {
-            step.label = getStepLabel({ ...raw, ...enriched });
+            const updatedLabel = getStepLabel(raw);
+            step.label = updatedLabel;
+            updateStepWithImprovedSelector(step.id, { label: updatedLabel });
           }
-
-          updateStepWithImprovedSelector(step.id, {
-            improvedSelector: enriched.bestSelector,
-            score: enriched.score,
-            reason: enriched.reason,
-            label: step.label,
-          });
         } catch (err) {
-          console.warn("⚠️ Selector enrichment failed:", err);
+          console.warn("Failed to update label:", err);
         }
       } catch (err) {
         console.error("Failed to parse WS message:", err);

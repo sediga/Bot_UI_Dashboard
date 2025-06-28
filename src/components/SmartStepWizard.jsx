@@ -8,7 +8,7 @@ export default function SmartStepWizard({
   onSmartStepCreated,
   onCancel,
   availableExtractSteps = [],
-  currentLoopId, // Added to pass the currentLoopId
+  currentLoopId,
 }) {
   const [step, setStep] = useState(1);
   const [stepType, setStepType] = useState("");
@@ -19,111 +19,6 @@ export default function SmartStepWizard({
   const [loopCount, setLoopCount] = useState(3);
   const [selectedSource, setSelectedSource] = useState("");
   const [stepName, setStepName] = useState("");
-
-  const startGridPick = async () => {
-    setIsPicking(true);
-    try {
-      await fetch(`${config.agentServerUrl}/api/target-pick-mode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "start" }),
-      });
-    } catch (err) {
-      console.error("Error starting grid pick mode:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (pickedTarget?.type === "targetPicked") {
-      setIsPicking(false);
-      const typedColumns = pickedTarget.metadata?.columnHeaders || [];
-      setGridMeta({ ...pickedTarget.metadata, typedColumns });
-      setStep(2);
-    }
-  }, [pickedTarget]);
-
-  const toggleColumn = (colName) => {
-    setSelectedColumns((prev) =>
-      prev.includes(colName) ? prev.filter((c) => c !== colName) : [...prev, colName]
-    );
-  };
-
-  const handleFinish = () => {
-    let stepPayload = null;
-
-    if (stepType === "extract-grid") {
-      let gridSelector = gridMeta?.gridSelector || "";
-      if (!gridSelector && gridMeta?.outerHTML) {
-        const temp = document.createElement("div");
-        temp.innerHTML = gridMeta.outerHTML;
-        const el = temp.firstElementChild;
-        if (el) gridSelector = getUniqueSelector(el);
-      }
-
-      const rowSelector = `${gridSelector} div[role='row']`;
-      const columnMappings = selectedColumns.map((headerName) => {
-        const colIndex = gridMeta.columnHeaders.findIndex((col) => col.header === headerName);
-        return {
-          header: headerName,
-          columnIndex: colIndex,
-          selector: `div[role="gridcell"][data-colindex="${colIndex}"]`,
-        };
-      });
-
-      stepPayload = {
-        id: `extractStep_${Date.now()}`,
-        type: "smartExtract",
-        name: stepName,
-        gridSelector,
-        rowSelector,
-        columnMappings,
-        filters,
-      };
-    }
-
-    else if (stepType === "loop-counter") {
-      const loopId = `loopstep_${Date.now()}`;
-      stepPayload = {
-        id: loopId,
-        type: "dataLoop",
-        loopType: "counter",
-        name: stepName,
-        loopCount,
-        actionsPerRow: [],
-        parentId: currentLoopId, // Set parentId for loop
-      };
-    }
-
-    else if (stepType === "loop-dataset") {
-      const loopId = `dataloopStep_${Date.now()}`;
-      stepPayload = {
-        id: loopId,
-        type: "dataLoop",
-        loopType: "dataset",
-        name: stepName,
-        source: selectedSource,
-        actionsPerRow: [],
-        parentId: currentLoopId, // Set parentId for dataset loop
-      };
-    }
-
-    fetch(`${config.agentServerUrl}/api/target-pick-done`, {
-      method: "POST",
-    }).catch((err) => console.error("Failed to notify agent on cancel:", err));
-
-    onSmartStepCreated(stepPayload);
-    reset();
-  };
-
-  const handleCancel = () => {
-    if (isPicking) {
-      fetch(`${config.agentServerUrl}/api/target-pick-done`, {
-        method: "POST",
-      }).catch((err) => console.error("Failed to notify agent on cancel:", err));
-    }
-    if (typeof onCancel === "function") onCancel();
-    reset();
-  };
 
   const reset = () => {
     setStep(1);
@@ -137,62 +32,309 @@ export default function SmartStepWizard({
     setStepName("");
   };
 
+  const handleCancel = () => {
+    if (isPicking) {
+      fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
+    }
+    if (typeof onCancel === "function") onCancel();
+    reset();
+  };
+
+  const handleFinish = () => {
+    let payload = null;
+
+    if (stepType === "extract-grid" && gridMeta) {
+      let gridSelector = gridMeta?.gridSelector;
+      if (!gridSelector && gridMeta.outerHTML) {
+        const el = document.createElement("div");
+        el.innerHTML = gridMeta.outerHTML;
+        const element = el.firstElementChild;
+        if (element) gridSelector = getUniqueSelector(element);
+      }
+
+      const rowSelector = `${gridSelector} div[role='row']`;
+      const columnMappings = selectedColumns.map(header => {
+        const index = gridMeta.columnHeaders.findIndex(c => c.header === header);
+        return {
+          header,
+          columnIndex: index,
+          selector: `div[role="gridcell"][data-colindex="${index}"]`,
+          selectors: {
+            preferred: `div[role="gridcell"][data-colindex="${index}"]`,
+          },
+        };
+      });
+
+      payload = {
+        id: `extractStep_${Date.now()}`,
+        type: "gridExtract",
+        name: stepName,
+        gridSelector,
+        rowSelector,
+        selectors: { grid: gridSelector, row: rowSelector },
+        columnMappings,
+        filters,
+      };
+    } else if (stepType === "loop-counter") {
+      payload = {
+        id: `loopstep_${Date.now()}`,
+        type: "counterloop",
+        loopType: "counter",
+        name: stepName,
+        loopCount,
+        actionsPerRow: [],
+        parentId: currentLoopId,
+      };
+    } else if (stepType === "loop-dataset") {
+      payload = {
+        id: `dataloopStep_${Date.now()}`,
+        type: "dataLoop",
+        loopType: "dataset",
+        name: stepName,
+        source: selectedSource,
+        actionsPerRow: [],
+        parentId: currentLoopId,
+      };
+    }
+
+    fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
+    onSmartStepCreated(payload);
+    reset();
+  };
+
+  const startGridPick = async () => {
+    setIsPicking(true);
+    await fetch(`${config.agentServerUrl}/api/target-pick-mode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "start" }),
+    });
+  };
+
+  useEffect(() => {
+    if (pickedTarget?.type === "targetPicked") {
+      setIsPicking(false);
+      const typedColumns = pickedTarget.metadata?.columnHeaders || [];
+      setGridMeta({ ...pickedTarget.metadata, typedColumns });
+      setStep(2);
+    }
+  }, [pickedTarget]);
+
+  const toggleColumn = (colName) => {
+    setSelectedColumns(prev =>
+      prev.includes(colName)
+        ? prev.filter(c => c !== colName)
+        : [...prev, colName]
+    );
+  };
+
+  const stepCard = (title, description, onClick, disabled = false) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`border rounded-lg p-4 text-left shadow-sm hover:shadow-md transition-all ${
+        disabled ? "opacity-50 cursor-not-allowed" : "bg-white"
+      }`}
+    >
+      <div className="font-semibold text-sm">{title}</div>
+      <div className="text-xs text-gray-500 mt-1">{description}</div>
+    </button>
+  );
+
+  const renderStep1 = () => (
+    <div className="space-y-6">
+      <div className="text-sm font-semibold text-blue-700">Step 1: Choose Type</div>
+
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">📥 Extract Data</h4>
+          <div className="grid grid-cols-2 gap-4">
+            {stepCard("From Data Grid", "Extract rows and columns", () => {
+              setStepType("extract-grid");
+              startGridPick();
+            })}
+            {stepCard("From API (coming soon)", "Pull data from backend", null, true)}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">🔁 Loop</h4>
+          <div className="grid grid-cols-2 gap-4">
+            {stepCard("Counter-Based Loop", "Repeat step N times", () => {
+              setStepType("loop-counter");
+              setStep(2);
+            })}
+            {stepCard("Data-Driven Loop", "Loop over extracted grid", () => {
+              setStepType("loop-dataset");
+              setStep(2);
+            })}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">🧠 Conditional (soon)</h4>
+          <div className="grid grid-cols-2 gap-4">
+            {stepCard("If / Else Block", "Add conditional logic", null, true)}
+            {stepCard("Wait for Element", "Pause until condition met", null, true)}
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={handleCancel}
+        className="text-sm text-red-600 underline mt-4 block"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+
+  const renderExtractGrid = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between text-sm text-blue-700 font-semibold">
+        <span>Step 1: Choose Type</span>
+        <span>Step 2: Configure</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block font-medium mb-2">Select Columns</label>
+          {(gridMeta.columnHeaders || []).map(({ header }, idx) => (
+            <label key={idx} className="flex items-center gap-2 mb-1">
+              <input
+                type="checkbox"
+                checked={selectedColumns.includes(header)}
+                onChange={() => toggleColumn(header)}
+              />
+              {header}
+            </label>
+          ))}
+        </div>
+
+        <div>
+          <label className="block font-medium mb-2">Step Name</label>
+          <input
+            type="text"
+            className="w-full border px-2 py-1 rounded"
+            value={stepName}
+            onChange={(e) => setStepName(e.target.value)}
+            placeholder="e.g., Extract Patients"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block font-medium mb-1">Filters</label>
+        <FilterBuilder
+          columns={gridMeta.typedColumns || []}
+          filters={filters}
+          onFiltersChange={setFilters}
+        />
+      </div>
+
+      <div className="flex justify-between mt-4">
+        <button onClick={() => setStep(1)} className="text-sm text-gray-600">← Back</button>
+        <button
+          onClick={handleFinish}
+          className="bg-green-600 text-white px-4 py-1 rounded"
+          disabled={selectedColumns.length === 0 || !stepName.trim()}
+        >
+          Save Step
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderLoopCounter = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between text-sm text-blue-700 font-semibold">
+        <span>Step 1: Choose Type</span>
+        <span>Step 2: Configure</span>
+      </div>
+
+      <div>
+        <label className="block mb-2">Loop Count</label>
+        <input
+          type="number"
+          className="w-full border px-2 py-1 rounded"
+          min={1}
+          value={loopCount}
+          onChange={(e) => setLoopCount(parseInt(e.target.value))}
+        />
+      </div>
+
+      <div>
+        <label className="block mb-2">Step Name</label>
+        <input
+          type="text"
+          className="w-full border px-2 py-1 rounded"
+          value={stepName}
+          onChange={(e) => setStepName(e.target.value)}
+        />
+      </div>
+
+      <div className="flex justify-between mt-4">
+        <button onClick={() => setStep(1)} className="text-sm text-gray-600">← Back</button>
+        <button
+          onClick={handleFinish}
+          className="bg-green-600 text-white px-4 py-1 rounded"
+          disabled={loopCount < 1 || !stepName.trim()}
+        >
+          Add Loop Step
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderLoopDataset = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between text-sm text-blue-700 font-semibold">
+        <span>Step 1: Choose Type</span>
+        <span>Step 2: Configure</span>
+      </div>
+
+      <div>
+        <label className="block mb-2">Select Extract Step</label>
+        <select
+          className="w-full border px-2 py-1 rounded"
+          value={selectedSource}
+          onChange={(e) => setSelectedSource(e.target.value)}
+        >
+          <option value="">-- Choose --</option>
+          {availableExtractSteps.map(step => (
+            <option key={step.id} value={step.id}>
+              {step.name || step.id} ({step.columnMappings?.map(c => c.header).join(", ")})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block mb-2">Step Name</label>
+        <input
+          type="text"
+          className="w-full border px-2 py-1 rounded"
+          value={stepName}
+          onChange={(e) => setStepName(e.target.value)}
+        />
+      </div>
+
+      <div className="flex justify-between mt-4">
+        <button onClick={() => setStep(1)} className="text-sm text-gray-600">← Back</button>
+        <button
+          onClick={handleFinish}
+          className="bg-green-600 text-white px-4 py-1 rounded"
+          disabled={!selectedSource || !stepName.trim()}
+        >
+          Add Loop Step
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-4 text-sm relative z-10">
-      {step === 1 && (
-        <div className="space-y-6">
-          <h3 className="text-md font-semibold">What kind of smart step?</h3>
-
-          <div className="space-y-2">
-            <p className="font-medium text-sm">📥 Extract Data</p>
-            <button
-              className="bg-blue-600 text-white px-4 py-2 rounded w-full"
-              onClick={() => {
-                setStepType("extract-grid");
-                startGridPick();
-              }}
-            >
-              From Data Grid
-            </button>
-            <button
-              disabled
-              className="bg-gray-300 text-gray-600 px-4 py-2 rounded w-full cursor-not-allowed"
-            >
-              From API (coming soon)
-            </button>
-          </div>
-
-          <div className="space-y-2 mt-6">
-            <p className="font-medium text-sm">🔁 Loop Over Data</p>
-            <button
-              className="bg-green-600 text-white px-4 py-2 rounded w-full"
-              onClick={() => {
-                setStepType("loop-counter");
-                setStep(2);
-              }}
-            >
-              Counter-Based Loop
-            </button>
-            <button
-              className="bg-green-600 text-white px-4 py-2 rounded w-full"
-              onClick={() => {
-                setStepType("loop-dataset");
-                setStep(2);
-              }}
-            >
-              Data-Driven Loop
-            </button>
-          </div>
-
-          <button
-            onClick={handleCancel}
-            className="text-sm text-red-600 underline mt-4 block"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
+      {step === 1 && renderStep1()}
       {stepType === "extract-grid" && isPicking && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex flex-col items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm text-center space-y-4">
@@ -209,147 +351,9 @@ export default function SmartStepWizard({
           </div>
         </div>
       )}
-
-      {step === 2 && stepType === "extract-grid" && gridMeta && (
-        <>
-          <h3 className="font-medium">Step 2: Select Columns</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {(gridMeta.columnHeaders || []).map(({ header }, idx) => (
-              <label key={idx} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={selectedColumns.includes(header)}
-                  onChange={() => toggleColumn(header)}
-                />
-                {header}
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-3">
-            <label className="block font-medium mb-1">Filters</label>
-            <FilterBuilder
-              columns={gridMeta.typedColumns || []}
-              filters={filters}
-              onFiltersChange={setFilters}
-            />
-          </div>
-
-          <div className="mt-4">
-            <label className="block mb-1 font-medium">Step Name</label>
-            <input
-              type="text"
-              className="w-full border px-2 py-1 rounded"
-              value={stepName}
-              onChange={(e) => setStepName(e.target.value)}
-              placeholder="e.g., Extract Pending Patients"
-            />
-          </div>
-
-          <div className="flex justify-between mt-4">
-            <button
-              onClick={() => setStep(1)}
-              className="text-sm text-gray-600"
-            >
-              ← Back
-            </button>
-            <button
-              onClick={handleFinish}
-              className="bg-green-600 text-white px-4 py-1 rounded"
-              disabled={selectedColumns.length === 0 || !stepName.trim()}
-            >
-              Save Extract Step
-            </button>
-          </div>
-        </>
-      )}
-
-      {step === 2 && stepType === "loop-counter" && (
-        <>
-          <h3 className="font-medium">Step 2: Counter Loop</h3>
-          <label className="block mb-2">How many times to loop?</label>
-          <input
-            type="number"
-            className="w-full border px-2 py-1 rounded"
-            min={1}
-            value={loopCount}
-            onChange={(e) => setLoopCount(parseInt(e.target.value))}
-          />
-
-          <div className="mt-4">
-            <label className="block mb-1 font-medium">Step Name</label>
-            <input
-              type="text"
-              className="w-full border px-2 py-1 rounded"
-              value={stepName}
-              onChange={(e) => setStepName(e.target.value)}
-              placeholder="e.g., Retry 5 Times"
-            />
-          </div>
-
-          <div className="flex justify-between mt-4">
-            <button
-              onClick={() => setStep(1)}
-              className="text-sm text-gray-600"
-            >
-              ← Back
-            </button>
-            <button
-              onClick={handleFinish}
-              className="bg-green-600 text-white px-4 py-1 rounded"
-              disabled={loopCount < 1 || !stepName.trim()}
-            >
-              Add Loop Step
-            </button>
-          </div>
-        </>
-      )}
-
-      {step === 2 && stepType === "loop-dataset" && (
-        <>
-          <h3 className="font-medium">Step 2: Data-Driven Loop</h3>
-          <label className="block mb-2">Select Extract Step</label>
-          <select
-            className="w-full border px-2 py-1 rounded"
-            value={selectedSource}
-            onChange={(e) => setSelectedSource(e.target.value)}
-          >
-            <option value="">-- Choose --</option>
-            {availableExtractSteps.map((step) => (
-              <option key={step.id} value={step.id}>
-                {step.name || step.id} ({step.columnMappings?.map(c => c.header).join(", ")})
-              </option>
-            ))}
-          </select>
-
-          <div className="mt-4">
-            <label className="block mb-1 font-medium">Step Name</label>
-            <input
-              type="text"
-              className="w-full border px-2 py-1 rounded"
-              value={stepName}
-              onChange={(e) => setStepName(e.target.value)}
-              placeholder="e.g., Loop Over Extracted Patients"
-            />
-          </div>
-
-          <div className="flex justify-between mt-4">
-            <button
-              onClick={() => setStep(1)}
-              className="text-sm text-gray-600"
-            >
-              ← Back
-            </button>
-            <button
-              onClick={handleFinish}
-              className="bg-green-600 text-white px-4 py-1 rounded"
-              disabled={!selectedSource || !stepName.trim()}
-            >
-              Add Loop Step
-            </button>
-          </div>
-        </>
-      )}
+      {step === 2 && stepType === "extract-grid" && gridMeta && renderExtractGrid()}
+      {step === 2 && stepType === "loop-counter" && renderLoopCounter()}
+      {step === 2 && stepType === "loop-dataset" && renderLoopDataset()}
     </div>
   );
 }

@@ -14,14 +14,15 @@ export default function StepList({
 }) {
   const [expandedSteps, setExpandedSteps] = useState({});
   const [showSmartWizard, setShowSmartWizard] = useState(false);
-  const [activeLoopIndex, setActiveLoopIndex] = useState(null);
+  const [activeLoopId, setActiveLoopId] = useState(null);
+  const [finalizedLoops, setFinalizedLoops] = useState(new Set());
   const scrollRef = useRef(null);
 
   useEffect(() => {
     const initialExpanded = {};
     steps.forEach((step, index) => {
       if (["dataLoop", "counterloop", "loop"].includes(step.type)) {
-        initialExpanded[index] = true;
+        initialExpanded[step.id] = true;
       }
     });
     setExpandedSteps(initialExpanded);
@@ -33,23 +34,45 @@ export default function StepList({
     }
   }, [steps]);
 
-  const toggleExpand = (index) => {
+  const toggleExpand = (id) => {
     setExpandedSteps((prev) => ({
       ...prev,
-      [index]: !prev[index],
+      [id]: !prev[id],
     }));
   };
 
-  const deleteStep = (index) => {
-    const updated = [...steps];
-    updated.splice(index, 1);
+  const deleteStep = (stepId) => {
+    const updated = steps.filter((s) => s.id !== stepId && s.parentId !== stepId);
     setSteps(updated);
   };
 
-  const handleSmartStepCreated = (step) => {
+  const deleteSubStep = (step) => {
+    const parentId = step.parentId;
+    const siblings = steps.filter((s) => s.parentId === parentId && s.id !== step.id);
+    const parentIsFinalized = finalizedLoops.has(parentId);
+
+    if (siblings.length === 0 && parentIsFinalized) {
+      const confirmDelete = window.confirm(
+        "This is the last step in the loop and the loop is finalized. Delete the entire loop?"
+      );
+      if (!confirmDelete) return;
+
+      const updated = steps.filter((s) => s.id !== step.id && s.id !== parentId);
+      setSteps(updated);
+    } else {
+      const updated = steps.filter((s) => s.id !== step.id);
+      setSteps(updated);
+    }
+  };
+
+  const handleSmartStepCreated = async (step) => {
     setSteps((prev) => [...prev, step]);
     setPickedTarget(null);
     setShowSmartWizard(false);
+
+    if (["loop", "dataLoop", "counterloop"].includes(step.type)) {
+      await startLoopRecording(step);
+    }
   };
 
   const handleCancelWizard = () => {
@@ -60,210 +83,183 @@ export default function StepList({
     }).catch((err) => console.error("Failed to notify agent on cancel:", err));
   };
 
-  const extractSteps = steps.filter((step) => step.type === "smartExtract");
-  const canAddSmartStep = agentStatus === "recording" && !showSmartWizard && activeLoopIndex === null;
+  const extractSteps = steps.filter((step) => step.type === "gridExtract");
+  const canAddSmartStep =
+    agentStatus === "recording" && !showSmartWizard && activeLoopId === null;
 
-  const startLoopRecording = async (i, name) => {
+  const startLoopRecording = async (step) => {
     try {
       await fetch(`${config.agentServerUrl}/api/start-loop-recording`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loopIndex: i, loopName: name || `Loop_${i}` }),
+        body: JSON.stringify({ loopName: step.name }),
       });
-      setActiveLoopIndex(i);
-      setCurrentLoopId(steps[i]?.id);
+      setActiveLoopId(step.id);
+      setCurrentLoopId(step.id);
     } catch (err) {
       console.error("Failed to start loop recording", err);
     }
   };
 
   const stopLoopRecording = async () => {
+    const hasSteps = steps.some((s) => s.parentId === activeLoopId);
+
+    if (!hasSteps) {
+      const confirmDelete = window.confirm(
+        "This loop has no recorded steps. It will be deleted. Proceed?"
+      );
+      if (!confirmDelete) return;
+
+      const updatedSteps = steps.filter(
+        (s) => s.id !== activeLoopId && s.parentId !== activeLoopId
+      );
+      setSteps(updatedSteps);
+    } else {
+      setFinalizedLoops((prev) => new Set(prev).add(activeLoopId));
+    }
+
     try {
-      await fetch(`${config.agentServerUrl}/api/end-loop-recording`, { method: "POST" });
+      await fetch(`${config.agentServerUrl}/api/end-loop-recording`, {
+        method: "POST",
+      });
     } catch (err) {
       console.error("Failed to end loop recording", err);
-    } finally {
-      setActiveLoopIndex(null);
-      setCurrentLoopId(null);
     }
+
+    setActiveLoopId(null);
+    setCurrentLoopId(null);
   };
 
-  const renderChildSteps = (parentId, level = 1) => {
-    const children = steps.filter((s) => s.parentId === parentId);
-    if (!children.length) return null;
+  const renderStep = (step, level = 0) => {
+    const indent = `ml-${level * 4}`;
+    const hasChildren = steps.some((s) => s.parentId === step.id);
+    const isRecording = activeLoopId === step.id;
+    const isFinalized = finalizedLoops.has(step.id);
 
     return (
-      <ul className="space-y-2 text-sm ml-4">
-        {children.map((sub, i) => (
-          <li
-            key={sub.id || i}
-            className="bg-slate-100 p-3 rounded shadow flex justify-between items-start"
-          >
-            <div className="text-xs text-gray-800">
-              <strong>{sub.type === "uiAction" ? sub.action : sub.type}</strong>{" "}
-              {sub.label ? (
-                <>
-                  → <span className="text-indigo-700">{sub.label}</span>
-                </>
-              ) : sub.selector ? (
-                <>
-                  → <code>{sub.selector}</code>
-                </>
-              ) : null}
-              {sub.value && (
-                <span className="text-green-700 ml-1">= "{sub.value}"</span>
+      <li
+        key={step.id}
+        className={`bg-slate-100 p-3 rounded shadow flex justify-between items-start ${indent}`}
+      >
+        <div className="flex-1 pr-2 space-y-1">
+          {step.type === "navigate" && (
+            <div>
+              <span className="font-medium text-indigo-600">Navigate:</span>{" "}
+              <span className="text-gray-700">{step.url}</span>
+            </div>
+          )}
+
+          {step.type === "uiAction" && (
+            <div>
+              <span className="font-medium text-purple-600">{step.action}</span>{" "}
+              →{" "}
+              <span className="text-slate-700">
+                {step.label || (
+                  <span className="text-gray-400 italic">No label</span>
+                )}
+              </span>
+              {step.value && (
+                <span className="text-green-600 ml-1">= "{step.value}"</span>
               )}
             </div>
-            {renderChildSteps(sub.id, level + 1)}
-          </li>
-        ))}
-      </ul>
+          )}
+
+          {(step.type === "loop" ||
+            step.type === "counterloop" ||
+            step.type === "dataLoop") && (
+            <div className="flex items-start space-x-2">
+              <button
+                onClick={() => toggleExpand(step.id)}
+                className="text-xs text-blue-600 mt-1"
+              >
+                {expandedSteps[step.id] ? "[−]" : "[+]"}
+              </button>
+              <div className="flex-1">
+                <div className="font-semibold text-orange-600">
+                  {step.name || `Loop (${step.source || step.id})`}
+                </div>
+
+                {isRecording && (
+                  <div className="text-xs text-green-700 font-medium">
+                    🎤 Recording steps inside this loop…
+                  </div>
+                )}
+                {isFinalized && !isRecording && (
+                  <div className="text-xs text-gray-500 font-medium">
+                    ✅ Finalized – recording disabled
+                  </div>
+                )}
+
+                {expandedSteps[step.id] &&
+                  steps
+                    .filter((s) => s.parentId === step.id)
+                    .map((child) => renderStep(child, level + 1))}
+              </div>
+            </div>
+          )}
+
+
+          {step.type === "gridExtract" && (
+            <div className="p-2 rounded border bg-blue-50">
+              <div className="font-semibold text-blue-700">
+                {step.name || `Grid Extract (${step.id})`}
+              </div>
+              <div className="text-xs text-gray-600 mb-2">
+                <strong>ID:</strong> <code>{step.id}</code>
+              </div>
+              <ul className="text-sm list-disc pl-4 mb-2">
+                {step.columnMappings?.map((col) => (
+                  <li key={col.header}>
+                    {col.header} (Index: {col.columnIndex})
+                  </li>
+                ))}
+              </ul>
+              {step.filters?.length > 0 && (
+                <div className="text-sm">
+                  <p className="font-medium mb-1">Filters:</p>
+                  <ul className="list-disc pl-4">
+                    {step.filters.map((f, idx) => (
+                      <li key={idx}>
+                        {f.column} {f.operator} "{f.value}"
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col space-y-1 text-xs ml-2">
+          <button
+            onClick={() =>
+              step.parentId ? deleteSubStep(step) : deleteStep(step.id)
+            }
+            className="text-red-600 hover:text-red-800"
+          >
+            Delete
+          </button>
+        </div>
+      </li>
     );
   };
 
   return (
     <section className="col-span-1 bg-white p-4 rounded shadow h-[80vh] overflow-y-auto relative">
       <h2 className="text-lg font-semibold mb-4">Steps</h2>
-
       <ul className="space-y-2 text-sm">
         {steps
           .filter((step) => step.parentId === undefined || step.parentId === null)
-          .map((step, i) => {
-            const hasChildren = steps.some((s) => s.parentId === step.id);
-
-            return (
-              <li key={step.id || i} className="bg-slate-100 p-3 rounded shadow flex justify-between items-start">
-                <div className="flex-1 pr-2 space-y-1">
-                  {step.type === "navigate" && (
-                    <div>
-                      <span className="font-medium text-indigo-600">Navigate:</span>{" "}
-                      <span className="text-gray-700">{step.url}</span>
-                    </div>
-                  )}
-
-                  {step.type === "uiAction" && (
-                    <div>
-                      <span className="font-medium text-purple-600">{step.action}</span> →{" "}
-                      <span className="text-slate-700">
-                        {step.label || <code>{step.selector}</code>}
-                      </span>
-                      {step.value && (
-                        <span className="text-green-600 ml-1">= "{step.value}"</span>
-                      )}
-                    </div>
-                  )}
-
-                  {(step.type === "loop" || step.type === "counterloop") && (
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold text-orange-600">
-                          {step.name || `Loop (${step.source || step.id})`}
-                        </div>
-                        <button onClick={() => toggleExpand(i)} className="text-xs text-blue-600 ml-4">
-                          {expandedSteps[i] ? "[−]" : "[+]" }
-                        </button>
-                      </div>
-
-                      {activeLoopIndex === i ? (
-                        <div className="text-xs text-green-700 font-medium">
-                          🎤 Recording steps inside this loop…
-                        </div>
-                      ) : (
-                        <button
-                          className="text-xs text-blue-600 underline"
-                          onClick={() => startLoopRecording(i, step.name)}
-                        >
-                          ➕ Record inside this loop
-                        </button>
-                      )}
-
-                      {expandedSteps[i] && renderChildSteps(step.id)}
-                    </div>
-                  )}
-
-                  {step.type === "smartExtract" && (
-                    <div className="p-2 rounded border bg-blue-50">
-                      <div className="font-semibold text-blue-700">
-                        {step.name || `Grid Extract (${step.id})`}
-                      </div>
-                      <div className="text-xs text-gray-600 mb-2">
-                        <strong>ID:</strong> <code>{step.id}</code>
-                      </div>
-                      <ul className="text-sm list-disc pl-4 mb-2">
-                        {step.columnMappings?.map((col) => (
-                          <li key={col.header}>
-                            {col.header} (Index: {col.columnIndex})
-                          </li>
-                        ))}
-                      </ul>
-                      {step.filters?.length > 0 && (
-                        <div className="text-sm">
-                          <p className="font-medium mb-1">Filters:</p>
-                          <ul className="list-disc pl-4">
-                            {step.filters.map((f, idx) => (
-                              <li key={idx}>
-                                {f.column} {f.operator} "{f.value}"
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {step.type === "dataLoop" && (
-                    <div>
-                    <div className="p-2 rounded border bg-blue-50">
-                        <div className="font-semibold text-blue-700">
-                          {step.name || `Smart Loop (${step.id})`}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-gray-600 mb-1">
-                            <strong>ID:</strong> <code>{step.id}</code>
-                          </div>
-                          {hasChildren && (
-                            <button onClick={() => toggleExpand(i)} className="text-xs text-blue-600 ml-2">
-                              {expandedSteps[i] ? "[−]" : "[+]" }
-                            </button>
-                          )}
-                          </div>
-                      </div>
-
-                      {activeLoopIndex === i ? (
-                        <div className="text-xs text-green-700 font-medium">
-                          🎤 Recording steps inside this loop…
-                        </div>
-                      ) : (
-                        <button
-                          className="text-xs text-blue-600 underline"
-                          onClick={() => startLoopRecording(i, step.name)}
-                        >
-                          ➕ Record inside this loop
-                        </button>
-                      )}
-
-                      {expandedSteps[i] && renderChildSteps(step.id)}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-col space-y-1 text-xs ml-2">
-                  <button
-                    onClick={() => deleteStep(i)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          .map((step) => renderStep(step))}
       </ul>
 
-      {activeLoopIndex !== null && (
+      {activeLoopId !== null && (
         <div className="flex justify-between items-center mt-4 text-sm bg-green-50 border border-green-300 p-2 rounded">
           <span className="text-green-800">
-            Recording inside loop: <strong>{steps[activeLoopIndex]?.name || activeLoopIndex}</strong>
+            Recording inside loop:{" "}
+            <strong>
+              {steps.find((s) => s.id === activeLoopId)?.name || activeLoopId}
+            </strong>
           </span>
           <button onClick={stopLoopRecording} className="text-red-600 underline">
             Finish Loop Recording
