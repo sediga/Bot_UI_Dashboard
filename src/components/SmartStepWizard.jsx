@@ -40,67 +40,62 @@ export default function SmartStepWizard({
     reset();
   };
 
-  const handleFinish = () => {
-    let payload = null;
+const handleFinish = () => {
+  let payload = null;
 
-    if (stepType === "extract-grid" && gridMeta) {
-      let gridSelector = gridMeta?.gridSelector;
-      if (!gridSelector && gridMeta.outerHTML) {
-        const el = document.createElement("div");
-        el.innerHTML = gridMeta.outerHTML;
-        const element = el.firstElementChild;
-        if (element) gridSelector = getUniqueSelector(element);
-      }
-
-      const rowSelector = `${gridSelector} div[role='row']`;
-      const columnMappings = selectedColumns.map(header => {
-        const index = gridMeta.columnHeaders.findIndex(c => c.header === header);
-        return {
-          header,
-          columnIndex: index,
-          selector: `div[role="gridcell"][data-colindex="${index}"]`,
-          selectors: {
-            preferred: `div[role="gridcell"][data-colindex="${index}"]`,
-          },
-        };
-      });
-
-      payload = {
-        id: `extractStep_${Date.now()}`,
-        type: "gridExtract",
-        name: stepName,
-        gridSelector,
-        rowSelector,
-        selectors: { grid: gridSelector, row: rowSelector },
-        columnMappings,
-        filters,
-      };
-    } else if (stepType === "loop-counter") {
-      payload = {
-        id: `loopstep_${Date.now()}`,
-        type: "counterloop",
-        loopType: "counter",
-        name: stepName,
-        loopCount,
-        actionsPerRow: [],
-        parentId: currentLoopId,
-      };
-    } else if (stepType === "loop-dataset") {
-      payload = {
-        id: `dataloopStep_${Date.now()}`,
-        type: "dataLoop",
-        loopType: "dataset",
-        name: stepName,
-        source: selectedSource,
-        actionsPerRow: [],
-        parentId: currentLoopId,
-      };
+  if (stepType === "extract-grid" && gridMeta) {
+    let gridSelector = gridMeta?.gridSelector;
+    if (!gridSelector && gridMeta.outerHTML) {
+      const el = document.createElement("div");
+      el.innerHTML = gridMeta.outerHTML;
+      const element = el.firstElementChild;
+      if (element) gridSelector = getUniqueSelector(element);
     }
 
-    fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
-    onSmartStepCreated(payload);
-    reset();
-  };
+    const rowSelector = `${gridSelector} div[role='row']`;
+
+    const columnMappings = (gridMeta.columnMappings || [])
+      .filter(col => selectedColumns.includes(col.header.header))
+      .map(col => ({
+        ...col
+      }));
+
+    payload = {
+      id: `extractStep_${Date.now()}`,
+      type: "gridExtract",
+      name: stepName,
+      gridSelector,
+      rowSelector,
+      selectors: { grid: gridSelector, row: rowSelector },
+      columnMappings,
+      filters
+    };
+  } else if (stepType === "loop-counter") {
+    payload = {
+      id: `loopstep_${Date.now()}`,
+      type: "counterloop",
+      loopType: "counter",
+      name: stepName,
+      loopCount,
+      actionsPerRow: [],
+      parentId: currentLoopId
+    };
+  } else if (stepType === "loop-dataset") {
+    payload = {
+      id: `dataloopStep_${Date.now()}`,
+      type: "dataLoop",
+      loopType: "dataset",
+      name: stepName,
+      source: selectedSource,
+      actionsPerRow: [],
+      parentId: currentLoopId
+    };
+  }
+
+  fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
+  onSmartStepCreated(payload);
+  reset();
+};
 
   const startGridPick = async () => {
     setIsPicking(true);
@@ -199,8 +194,27 @@ export default function SmartStepWizard({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block font-medium mb-2">Select Columns</label>
+
+          <label className="flex items-center gap-2 mb-2 font-semibold">
+            <input
+              type="checkbox"
+              checked={
+                gridMeta.columnHeaders?.length > 0 &&
+                selectedColumns.length === gridMeta.columnHeaders.length
+              }
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedColumns(gridMeta.columnHeaders.map(c => c.header));
+                } else {
+                  setSelectedColumns([]);
+                }
+              }}
+            />
+            Select All
+          </label>
+
           {(gridMeta.columnHeaders || []).map(({ header }, idx) => (
-            <label key={idx} className="flex items-center gap-2 mb-1">
+            <label key={idx} className="flex items-center gap-2 mb-1 ml-4">
               <input
                 type="checkbox"
                 checked={selectedColumns.includes(header)}
@@ -209,6 +223,7 @@ export default function SmartStepWizard({
               {header}
             </label>
           ))}
+
         </div>
 
         <div>
@@ -303,7 +318,7 @@ export default function SmartStepWizard({
           <option value="">-- Choose --</option>
           {availableExtractSteps.map(step => (
             <option key={step.id} value={step.id}>
-              {step.name || step.id} ({step.columnMappings?.map(c => c.header).join(", ")})
+              {step.name || step.id} ({step.columnMappings?.map(c => c.header?.header).join(", ")})
             </option>
           ))}
         </select>

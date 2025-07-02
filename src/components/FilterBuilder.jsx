@@ -2,34 +2,43 @@ import { useState, useEffect } from "react";
 
 // Operators by data type
 const OPERATORS_BY_TYPE = {
-  string: ["contains", "equals", "starts with", "ends with", "regex"],
+  text: [
+    "contains",
+    "does not contain",
+    "equals",
+    "does not equal",
+    "starts with",
+    "does not start with",
+    "ends with",
+    "does not end with",
+    "regex",
+  ],
   number: [">", "<", ">=", "<=", "=", "!="],
   date: [">", "<", ">=", "<=", "=", "!="],
   boolean: ["is true", "is false"],
+  img: ["is true", "is false"],
 };
 
 export default function FilterBuilder({ columns = [], filters = [], onFiltersChange }) {
-  // Initialize filters with at least one row
   const [localFilters, setLocalFilters] = useState(
-    filters.length ? filters : [{ column: "", operator: "", value: "" }]
+    filters.length ? filters : [{ column: "", operator: "", value: "", variable: "" }]
   );
 
   useEffect(() => {
-    // Sync with external filters changes
     if (filters.length !== localFilters.length) {
-      setLocalFilters(filters.length ? filters : [{ column: "", operator: "", value: "" }]);
+      setLocalFilters(filters.length ? filters : [{ column: "", operator: "", value: "", variable: "" }]);
     }
   }, [filters]);
 
-  const updateFilter = (index, updatedFilter) => {
+  const updateFilter = (index, updated) => {
     const newFilters = [...localFilters];
-    newFilters[index] = updatedFilter;
+    newFilters[index] = { ...newFilters[index], ...updated };
     setLocalFilters(newFilters);
     onFiltersChange?.(newFilters);
   };
 
   const addFilterRow = () => {
-    setLocalFilters([...localFilters, { column: "", operator: "", value: "" }]);
+    setLocalFilters([...localFilters, { column: "", operator: "", value: "", variable: "" }]);
   };
 
   const removeFilterRow = (index) => {
@@ -41,19 +50,27 @@ export default function FilterBuilder({ columns = [], filters = [], onFiltersCha
   return (
     <div>
       {localFilters.map((filter, idx) => {
-        // Find type of selected column, default to string
-        const colType = columns.find((c) => c.header === filter.column)?.type || "string";
-        const operators = OPERATORS_BY_TYPE[colType] || OPERATORS_BY_TYPE["string"];
+        const columnMeta = columns.find((c) => c.header === filter.column) || {};
+        const rawType = columnMeta.type || "text";
+        const colType = filter.variable ? "date" : rawType;
+        const operators = OPERATORS_BY_TYPE[colType] || OPERATORS_BY_TYPE.text;
 
         return (
-          <div key={idx} className="flex items-center gap-2 mb-2">
-            {/* Column select */}
+        <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 mb-2 items-center">
+            {/* Column selector */}
             <select
-              className="border rounded px-2 py-1"
+              className="border rounded px-2 py-1 w-full"
               value={filter.column}
-              onChange={(e) =>
-                updateFilter(idx, { column: e.target.value, operator: "", value: "" })
-              }
+              onChange={(e) => {
+                const selectedColumn = e.target.value;
+                const selectedColMeta = columns.find((c) => c.header === selectedColumn);
+                updateFilter(idx, {
+                  column: selectedColumn,
+                  operator: "",
+                  value: "",
+                  variable: selectedColMeta?.variables?.[0]?.name || undefined,
+                });
+              }}
             >
               <option value="">Select column</option>
               {columns.map((col) => (
@@ -63,49 +80,70 @@ export default function FilterBuilder({ columns = [], filters = [], onFiltersCha
               ))}
             </select>
 
-            {/* Operator select */}
+            {/* Variable selector (only for text_with_date) */}
+            {rawType === "text_with_date" && columnMeta.variables?.length > 0 && (
+              <select
+                className="border rounded px-2 py-1 w-full"
+                value={filter.variable}
+                onChange={(e) => updateFilter(idx, { variable: e.target.value })}
+              >
+                <option value="">-- as text --</option>
+                {columnMeta.variables.map((v) => (
+                  <option key={v.name} value={v.name}>
+                    {v.name} ({v.format})
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Operator */}
             <select
-              className="border rounded px-2 py-1"
+              className="border rounded px-2 py-1 w-full"
               value={filter.operator}
-              onChange={(e) => updateFilter(idx, { ...filter, operator: e.target.value })}
+              onChange={(e) => updateFilter(idx, { operator: e.target.value })}
               disabled={!filter.column}
             >
               <option value="">Select operator</option>
               {operators.map((op) => (
                 <option key={op} value={op}>
-                  {op}
+                  {colType === "img"
+                    ? op === "is true"
+                      ? "Has Image"
+                      : "No Image"
+                    : op}
                 </option>
               ))}
             </select>
 
-            {/* Value input, hide for booleans */}
-            {colType !== "boolean" && (
+            {/* Value input */}
+            {!["boolean", "img"].includes(colType) && (
               <input
                 type="text"
-                className="border rounded px-2 py-1 flex-grow"
+                className="border rounded px-2 py-1 w-full"
                 placeholder="Value"
                 value={filter.value}
-                onChange={(e) => updateFilter(idx, { ...filter, value: e.target.value })}
+                onChange={(e) => updateFilter(idx, { value: e.target.value })}
                 disabled={!filter.operator}
               />
             )}
 
-            {/* Remove button if more than 1 filter */}
+            {/* Remove button */}
             {localFilters.length > 1 && (
-              <button
-                className="text-red-600 font-bold px-2"
-                onClick={() => removeFilterRow(idx)}
-                type="button"
-                aria-label="Remove filter row"
-              >
-                &times;
-              </button>
+              <div className="text-right">
+                <button
+                  className="text-red-600 font-bold"
+                  onClick={() => removeFilterRow(idx)}
+                  type="button"
+                  aria-label="Remove filter row"
+                >
+                  &times;
+                </button>
+              </div>
             )}
           </div>
         );
       })}
 
-      {/* Add filter row button */}
       <button
         className="mt-2 bg-blue-600 text-white px-3 py-1 rounded"
         onClick={addFilterRow}

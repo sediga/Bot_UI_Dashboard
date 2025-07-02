@@ -209,8 +209,8 @@ export default function StepList({
               </div>
               <ul className="text-sm list-disc pl-4 mb-2">
                 {step.columnMappings?.map((col) => (
-                  <li key={col.header}>
-                    {col.header} (Index: {col.columnIndex})
+                  <li key={col.header?.header}>
+                    {col.header?.header} (Index: {col.columnIndex})
                   </li>
                 ))}
               </ul>
@@ -220,7 +220,10 @@ export default function StepList({
                   <ul className="list-disc pl-4">
                     {step.filters.map((f, idx) => (
                       <li key={idx}>
-                        {f.column} {f.operator} "{f.value}"
+                        {typeof f.column === "object"
+                          ? f.column.header || JSON.stringify(f.column)
+                          : f.column}{" "}
+                        {f.operator} "{f.value}"
                       </li>
                     ))}
                   </ul>
