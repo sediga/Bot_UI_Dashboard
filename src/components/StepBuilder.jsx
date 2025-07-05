@@ -19,6 +19,13 @@ export default function StepBuilder({
   const [loopCount, setLoopCount] = useState(1);
   const [availableFlows, setAvailableFlows] = useState([]);
   const [selectedFlow, setSelectedFlow] = useState("");
+  const [showParamModal, setShowParamModal] = useState(false);
+  const [pendingStep, setPendingStep] = useState(null);
+  const [loopColumns, setLoopColumns] = useState([]);
+
+  function hasPlaceholder(val) {
+    return typeof val === "string" && /{{\s*[\w.]+\s*}}/.test(val);
+  }
 
   function getStepLabel(step) {
     const action = step.action || "Action";
@@ -59,53 +66,66 @@ export default function StepBuilder({
     ws.onerror = (err) => console.error("WebSocket error", err);
     ws.onclose = () => console.warn("⚠️ WebSocket closed");
 
-    ws.onmessage = async (event) => {
-      try {
-        const raw = JSON.parse(event.data);
-        if (raw.type === "targetPicked") {
-          setPickedTarget(raw);
-          return;
-        }
+  ws.onmessage = async (event) => {
+    try {
+      const raw = JSON.parse(event.data);
+      if (raw.type === "targetPicked") {
+        setPickedTarget(raw);
+        return;
+      }
 
-        const step = {
-          id: crypto.randomUUID(),
-          type: "uiAction",
-          action: raw.action,
-          value: raw.value || null,
-          url: raw.url || null,
-          timestamp: raw.timestamp || Date.now(),
-          label: getStepLabel(raw),
-          selector: raw.selector, // preserved for player
-          selectors: raw.selectors, // preserved for player
-          improvedSelector: raw.improvedSelector, // if agent sends it
-          devToolsSelector: raw.devToolsSelector, // if agent sends it
-          tagName: raw.tagName,
-          attributes: raw.attributes || {},
-          innerText: raw.innerText,
-          elementText: raw.elementText,
-          classList: raw.classList || [],
-          boundingBox: raw.boundingBox,
-        };
+      const step = {
+        id: crypto.randomUUID(),
+        type: "uiAction",
+        action: raw.action,
+        value: raw.value || null,
+        url: raw.url || null,
+        timestamp: raw.timestamp || Date.now(),
+        label: getStepLabel(raw),
+        selector: raw.selector,
+        selectors: raw.selectors,
+        improvedSelector: raw.improvedSelector,
+        devToolsSelector: raw.devToolsSelector,
+        tagName: raw.tagName,
+        attributes: raw.attributes || {},
+        innerText: raw.innerText,
+        elementText: raw.elementText,
+        classList: raw.classList || [],
+        boundingBox: raw.boundingBox,
+      };
 
-        if (currentLoopId) {
-          step.parentId = currentLoopId;
-        }
+      if (currentLoopId) {
+        step.parentId = currentLoopId;
 
-        setSteps(prev => [...prev, step]);
-
-        try {
-          if (!step.label || step.label.includes("Unknown")) {
-            const updatedLabel = getStepLabel(raw);
-            step.label = updatedLabel;
-            updateStepWithImprovedSelector(step.id, { label: updatedLabel });
+        // Dynamic mapping fields (coming from recorder.js enhancements)
+        if (["change", "type", "select", "click"].includes(raw.action)) {
+          const dynamicVal = raw.attributes?.["data-dynamic-value"];
+          if (dynamicVal && dynamicVal.startsWith("{{") && dynamicVal.endsWith("}}")) {
+            step.dynamicValue = dynamicVal;
+            step.isDynamic = true;
+            step.transformType = raw.attributes?.["data-transform-type"] || null;
+            step.transform = raw.attributes?.["data-transform"] || null;
+            step.mappedScope = raw.attributes?.["data-botflows-mapped"] || "global";
           }
-        } catch (err) {
-          console.warn("Failed to update label:", err);
+        }
+      }
+
+
+      setSteps(prev => [...prev, step]);
+
+      try {
+        if (!step.label || step.label.includes("Unknown")) {
+          const updatedLabel = getStepLabel(raw);
+          step.label = updatedLabel;
+          updateStepWithImprovedSelector(step.id, { label: updatedLabel });
         }
       } catch (err) {
-        console.error("Failed to parse WS message:", err);
+        console.warn("Failed to update label:", err);
       }
-    };
+    } catch (err) {
+      console.error("Failed to parse WS message:", err);
+    }
+  };
 
     return () => ws.close();
   }, [addStep, updateStepWithImprovedSelector, setSteps, currentLoopId]);
@@ -176,8 +196,8 @@ export default function StepBuilder({
 
       const data = await res.json();
       alert(data.message || "Flow saved.");
-      setUrlInput("");
-      clearSteps();
+      // setUrlInput("");
+      // clearSteps();
     } catch (err) {
       console.error("Failed to save flow:", err);
       alert("Error saving flow");
@@ -187,7 +207,25 @@ export default function StepBuilder({
     setSaveFileName("");
   };
 
-  const loadFlow = async (selectedFlow) => {
+  const handlePreviewReplay = async () => {
+    try {
+      const res = await fetch(`${config.agentServerUrl}/api/preview-replay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(steps),
+      });
+
+      const result = await res.json();
+      if (result.status !== "ok") {
+        alert("Preview failed: " + result.details);
+      }
+    } catch (err) {
+      console.error("Preview replay error:", err);
+      alert("Preview replay failed.");
+    }
+  };
+
+const loadFlow = async (selectedFlow) => {
     if (!selectedFlow) return;
     try {
       const headers = {
@@ -251,6 +289,13 @@ export default function StepBuilder({
           className="bg-green-600 text-white px-3 py-2 rounded"
         >
           Save
+        </button>
+        <button
+          onClick={handlePreviewReplay}
+          className="bg-purple-600 text-white px-3 py-2 rounded"
+          disabled={status !== "recording"}
+        >
+          Preview
         </button>
       </div>
 

@@ -81,6 +81,8 @@ const handleFinish = () => {
       parentId: currentLoopId
     };
   } else if (stepType === "loop-dataset") {
+    const sourceStep = availableExtractSteps.find(s => s.id === selectedSource);
+    
     payload = {
       id: `dataloopStep_${Date.now()}`,
       type: "dataLoop",
@@ -90,7 +92,17 @@ const handleFinish = () => {
       actionsPerRow: [],
       parentId: currentLoopId
     };
-  }
+
+    fetch(`${config.agentServerUrl}/api/start-loop-recording`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        loopId: payload.id,
+        loopName: payload.name,
+        sourceStep: sourceStep // full gridExtract step
+      })
+    })
+}
 
   fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
   onSmartStepCreated(payload);

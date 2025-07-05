@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import SmartStepWizard from "./SmartStepWizard";
 import Modal from "./SmartStepModal";
 import config from "../config";
+import ParameterMappingModal from "./ParameterMappingModal";
 
 export default function StepList({
   steps,
@@ -17,6 +18,9 @@ export default function StepList({
   const [activeLoopId, setActiveLoopId] = useState(null);
   const [finalizedLoops, setFinalizedLoops] = useState(new Set());
   const scrollRef = useRef(null);
+  const [showParamModal, setShowParamModal] = useState(false);
+  const [pendingStep, setPendingStep] = useState(null);
+  const [loopColumns, setLoopColumns] = useState([]);
 
   useEffect(() => {
     const initialExpanded = {};
@@ -89,11 +93,11 @@ export default function StepList({
 
   const startLoopRecording = async (step) => {
     try {
-      await fetch(`${config.agentServerUrl}/api/start-loop-recording`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loopName: step.name }),
-      });
+      // await fetch(`${config.agentServerUrl}/api/start-loop-recording`, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ loopName: step.name }),
+      // });
       setActiveLoopId(step.id);
       setCurrentLoopId(step.id);
     } catch (err) {
@@ -161,6 +165,30 @@ export default function StepList({
               {step.value && (
                 <span className="text-green-600 ml-1">= "{step.value}"</span>
               )}
+
+          {step.isDynamic && (
+            <div className="relative group inline-block ml-2">
+              <button
+                className="text-blue-600 underline text-xs"
+                onClick={() => {
+                  const gridStep = steps.find(
+                    (s) => s.type === "gridExtract" && s.parentId === step.Id
+                  );
+                  const columns = gridStep?.columnMappings?.map((col) => col.header?.header) || [];
+                  setLoopColumns(columns);
+                  setPendingStep(step);
+                  setShowParamModal(true);
+                }}
+              >
+                Map
+              </button>
+
+              {/* Tooltip */}
+              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 px-2 py-1 text-xs text-white bg-black rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                Edit dynamic input value
+              </div>
+            </div>
+          )}
             </div>
           )}
 
@@ -299,6 +327,32 @@ export default function StepList({
           />
         </Modal>
       )}
+
+      {showParamModal && (
+        <ParameterMappingModal
+          show={showParamModal}
+          onClose={() => {
+            setShowParamModal(false);
+            setPendingStep(null);
+          }}
+          onSave={(newValue) => {
+            const updatedStep = {
+              ...pendingStep,
+              value: newValue,
+              dynamicValue: newValue,
+              label: `${pendingStep.action.charAt(0).toUpperCase() + pendingStep.action.slice(1)}: ${newValue}`
+            };
+            setSteps((prev) =>
+              prev.map((s) => (s.id === pendingStep.id ? updatedStep : s))
+            );
+            setShowParamModal(false);
+            setPendingStep(null);
+          }}
+          columns={loopColumns}
+          defaultValue={pendingStep?.value || ""}
+        />
+      )}
+
     </section>
   );
 }
