@@ -66,66 +66,78 @@ export default function StepBuilder({
     ws.onerror = (err) => console.error("WebSocket error", err);
     ws.onclose = () => console.warn("⚠️ WebSocket closed");
 
-  ws.onmessage = async (event) => {
-    try {
-      const raw = JSON.parse(event.data);
-      if (raw.type === "targetPicked") {
-        setPickedTarget(raw);
-        return;
-      }
+    ws.onmessage = async (event) => {
+      try {
+        const raw = JSON.parse(event.data);
 
-      const step = {
-        id: crypto.randomUUID(),
-        type: "uiAction",
-        action: raw.action,
-        value: raw.value || null,
-        url: raw.url || null,
-        timestamp: raw.timestamp || Date.now(),
-        label: getStepLabel(raw),
-        selector: raw.selector,
-        selectors: raw.selectors,
-        improvedSelector: raw.improvedSelector,
-        devToolsSelector: raw.devToolsSelector,
-        tagName: raw.tagName,
-        attributes: raw.attributes || {},
-        innerText: raw.innerText,
-        elementText: raw.elementText,
-        classList: raw.classList || [],
-        boundingBox: raw.boundingBox,
-      };
+        if (raw.type === "targetPicked") {
+          setPickedTarget(raw);
+          return;
+        }
 
-      if (currentLoopId) {
-        step.parentId = currentLoopId;
+        const isSmartColumnClick = raw.type === "clickInColumn";
 
-        // Dynamic mapping fields (coming from recorder.js enhancements)
-        if (["change", "type", "select", "click"].includes(raw.action)) {
-          const dynamicVal = raw.attributes?.["data-dynamic-value"];
-          if (dynamicVal && dynamicVal.startsWith("{{") && dynamicVal.endsWith("}}")) {
-            step.dynamicValue = dynamicVal;
-            step.isDynamic = true;
-            step.transformType = raw.attributes?.["data-transform-type"] || null;
-            step.transform = raw.attributes?.["data-transform"] || null;
-            step.mappedScope = raw.attributes?.["data-botflows-mapped"] || "global";
+        const step = {
+          id: crypto.randomUUID(),
+          type: "uiAction",
+          action: raw.action,
+          value: raw.value || null,
+          url: raw.url || null,
+          timestamp: raw.timestamp || Date.now(),
+          label: getStepLabel(raw),
+          selector: raw.selector,
+          selectors: raw.selectors,
+          improvedSelector: raw.improvedSelector,
+          devToolsSelector: raw.devToolsSelector,
+          tagName: raw.tagName,
+          attributes: raw.attributes || {},
+          innerText: raw.innerText,
+          elementText: raw.elementText,
+          classList: raw.classList || [],
+          boundingBox: raw.boundingBox,
+        };
+
+        if (currentLoopId) {
+          step.parentId = currentLoopId;
+
+          // Handle smart column action mapping
+          if (isSmartColumnClick) {
+            step.columnIndex = raw.columnIndex;
+            step.columnHeader = raw.columnHeader;
+            step.isSmartColumn = true;
+            step.smartActionType = raw.actionType || "click";
+          }
+
+          // Handle dynamic mapping fields
+          if (["change", "type", "select", "click"].includes(raw.action)) {
+            const dynamicVal = raw.attributes?.["data-dynamic-value"];
+            if (dynamicVal && dynamicVal.startsWith("{{") && dynamicVal.endsWith("}}")) {
+              step.dynamicValue = dynamicVal;
+              step.isDynamic = true;
+              step.transformType = raw.attributes?.["data-transform-type"] || null;
+              step.transform = raw.attributes?.["data-transform"] || null;
+              step.mappedScope = raw.attributes?.["data-botflows-mapped"] || "global";
+            }
           }
         }
-      }
 
+        setSteps(prev => [...prev, step]);
 
-      setSteps(prev => [...prev, step]);
-
-      try {
-        if (!step.label || step.label.includes("Unknown")) {
-          const updatedLabel = getStepLabel(raw);
-          step.label = updatedLabel;
-          updateStepWithImprovedSelector(step.id, { label: updatedLabel });
+        // Retry label update if needed
+        try {
+          if (!step.label || step.label.includes("Unknown")) {
+            const updatedLabel = getStepLabel(raw);
+            step.label = updatedLabel;
+            updateStepWithImprovedSelector(step.id, { label: updatedLabel });
+          }
+        } catch (err) {
+          console.warn("Failed to update label:", err);
         }
+
       } catch (err) {
-        console.warn("Failed to update label:", err);
+        console.error("Failed to parse WS message:", err);
       }
-    } catch (err) {
-      console.error("Failed to parse WS message:", err);
-    }
-  };
+    };
 
     return () => ws.close();
   }, [addStep, updateStepWithImprovedSelector, setSteps, currentLoopId]);
