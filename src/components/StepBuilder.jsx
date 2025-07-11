@@ -97,6 +97,10 @@ export default function StepBuilder({
           elementText: raw.elementText,
           classList: raw.classList || [],
           boundingBox: raw.boundingBox,
+          frameContext: raw.frameContext || null,
+          frameUrl: raw.frameUrl || null,
+          isVisible: raw.isVisible ?? true,
+          computedStyles: raw.computedStyles || {}
         };
 
         if (currentLoopId) {
@@ -152,6 +156,12 @@ export default function StepBuilder({
 
     try {
       clearSteps();
+      const navigateStep = {
+        id: crypto.randomUUID(),
+        type: "navigate",
+        url,
+      };
+      addStep(navigateStep);
       const res = await fetch(`${config.agentServerUrl}/api/record`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,12 +169,6 @@ export default function StepBuilder({
       });
       if (!res.ok) throw new Error("Failed to start recording");
 
-      const navigateStep = {
-        id: crypto.randomUUID(),
-        type: "navigate",
-        url,
-      };
-      addStep(navigateStep);
     } catch (err) {
       console.error("Error starting recording:", err);
       alert("Could not start recording. Is agent running?");
