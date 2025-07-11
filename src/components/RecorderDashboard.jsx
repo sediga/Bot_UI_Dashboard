@@ -1,9 +1,9 @@
-// RecorderDashboard.jsx
 import { useEffect, useState } from "react";
 import StepBuilder from "./StepBuilder";
 import StepList from "./StepList";
 import ReplayPanel from "./ReplayPanel";
 import config from "../config";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function RecorderDashboard() {
   const [steps, setSteps] = useState([]);
@@ -11,6 +11,7 @@ export default function RecorderDashboard() {
   const [activeTab, setActiveTab] = useState("create");
   const [agentStatus, setAgentStatus] = useState("unknown");
   const [pickedTarget, setPickedTarget] = useState(null);
+  const { logout } = useAuth();
 
   const actionPriority = (action) => {
     if (action === "type") return 3;
@@ -46,12 +47,10 @@ export default function RecorderDashboard() {
   const addStep = (step) => {
     const newStep = normalizeStep(step);
 
-    // If the step is inside a loop, set parentId to the current loop's ID
     if (step.parentId) {
-      newStep.parentId = step.parentId; // Ensure parentId is properly set
+      newStep.parentId = step.parentId;
     }
 
-    // Add to the steps list
     setSteps((prev) => [...prev, newStep]);
   };
 
@@ -97,29 +96,28 @@ export default function RecorderDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      <header className="bg-white shadow px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-semibold text-indigo-600">Botflows Dashboard</h1>
-        <nav className="space-x-4 text-sm font-medium">
-          <button
-            onClick={() => setActiveTab("create")}
-            className={activeTab === "create" ? "text-indigo-700" : "text-gray-500"}
-          >
-            Create Flow
-          </button>
-          <button
-            onClick={() => setActiveTab("replay")}
-            className={activeTab === "replay" ? "text-indigo-700" : "text-gray-500"}
-          >
-            Replay
-          </button>
-          <button
-            onClick={() => setActiveTab("config")}
-            className={activeTab === "config" ? "text-indigo-700" : "text-gray-500"}
-          >
-            Configure
-          </button>
-        </nav>
-      </header>
+      <div className="flex space-x-4 px-6 py-2 bg-white border-b">
+        <div className="bg-white px-6 pt-4 shadow-sm">
+          <nav className="flex space-x-2" aria-label="Tabs">
+            {["create", "replay", "config"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-t-md text-sm font-medium ${
+                  activeTab === tab
+                    ? "bg-indigo-100 text-indigo-700 shadow-inner border border-b-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {tab === "create" && "Create Flow"}
+                {tab === "replay" && "Replay"}
+                {tab === "config" && "Configure"}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+      </div>
 
       {["stopped", "unknown"].includes(agentStatus) && (
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 m-6 rounded">
@@ -177,6 +175,13 @@ export default function RecorderDashboard() {
       {activeTab === "replay" && (
         <main className="grid grid-cols-3 gap-4 p-6">
           <ReplayPanel />
+        </main>
+      )}
+
+      {activeTab === "config" && (
+        <main className="p-6 text-gray-600">
+          <h2 className="text-lg font-semibold mb-2">Configuration</h2>
+          <p>Coming soon: Configure agent settings, integrations, and replay options.</p>
         </main>
       )}
     </div>

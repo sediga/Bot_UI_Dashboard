@@ -22,6 +22,7 @@ export default function StepBuilder({
   const [showParamModal, setShowParamModal] = useState(false);
   const [pendingStep, setPendingStep] = useState(null);
   const [loopColumns, setLoopColumns] = useState([]);
+  const token = localStorage.getItem("botflows_token");
 
   function hasPlaceholder(val) {
     return typeof val === "string" && /{{\s*[\w.]+\s*}}/.test(val);
@@ -45,8 +46,9 @@ export default function StepBuilder({
     const fetchFlows = async () => {
       try {
         const headers = {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          "x-api-key": `${config.apiKey}`
+          "x-api-key": `${config.apiKey}` // Load from env later
         };
         const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, { headers });
         const data = await res.json();
@@ -197,8 +199,9 @@ export default function StepBuilder({
 
     try {
       const headers = {
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        "x-api-key": `${config.apiKey}`
+        "x-api-key": `${config.apiKey}` // Load from env later
       };
       const res = await fetch(`${config.apiBaseUrl}/api/flows/save`, {
         method: "POST",
@@ -241,10 +244,13 @@ const loadFlow = async (selectedFlow) => {
     if (!selectedFlow) return;
     try {
       const headers = {
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        "x-api-key": `${config.apiKey}`
+        "x-api-key": `${config.apiKey}` // Load from env later
       };
-      const res = await fetch(`${config.apiBaseUrl}/api/flows/load/${selectedFlow}`, { headers });
+      const res = await fetch(`${config.apiBaseUrl}/api/flows/load?path=${encodeURIComponent(selectedFlow)}`, {
+        headers: headers,
+      });
       const data = await res.json();
       if (!Array.isArray(data)) throw new Error("Invalid flow data");
 
@@ -323,10 +329,10 @@ const loadFlow = async (selectedFlow) => {
             loadFlow(e.target.value);
           }}
         >
-          <option value="">Select a flow</option>
-          {availableFlows.map((f) => (
-            <option key={f} value={f}>
-              {f}
+          <option value="">-- Choose saved flow --</option>
+          {availableFlows.map((flow) => (
+            <option key={flow.path} value={flow.path}>
+              {flow.name}
             </option>
           ))}
         </select>

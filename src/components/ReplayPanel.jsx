@@ -5,11 +5,13 @@ export default function ReplayPanel() {
   const [savedFlows, setSavedFlows] = useState([]);
   const [selectedFlow, setSelectedFlow] = useState("");
   const [log, setLog] = useState("");
+  const token = localStorage.getItem("botflows_token");
 
   useEffect(() => {
     const fetchSavedFlows = async () => {
       try {
         const headers = {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           "x-api-key": `${config.apiKey}` // Load from env later
         };
@@ -31,11 +33,12 @@ export default function ReplayPanel() {
     if (!selectedFlow) return;
 
     try {
-      const headers = {
-        "Content-Type": "application/json",
-        "x-api-key": `${config.apiKey}` // Load from env later
-      };
-        const apiRes = await fetch(`${config.apiBaseUrl}/api/flows/load/${encodeURIComponent(selectedFlow)}`  , {
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "x-api-key": `${config.apiKey}` // Load from env later
+        };
+        const apiRes = await fetch(`${config.apiBaseUrl}/api/flows/load?path=${encodeURIComponent(selectedFlow)}`, {
           headers: headers,
         });
         const apiData = await apiRes.json();
@@ -66,9 +69,9 @@ export default function ReplayPanel() {
           className="w-full px-3 py-2 border rounded text-sm"
         >
           <option value="">-- Choose saved flow --</option>
-          {savedFlows.map((filename) => (
-            <option key={filename} value={filename}>
-              {filename.replace(".json", "")}
+          {savedFlows.map((flow) => (
+            <option key={flow.path} value={flow.path}>
+              {flow.name}
             </option>
           ))}
         </select>
