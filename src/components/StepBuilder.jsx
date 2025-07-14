@@ -62,7 +62,12 @@ export default function StepBuilder({
   }, []);
 
   useEffect(() => {
-    const ws = new WebSocket(`${config.agentServerUrl}/ws/actions`);
+    const authToken = localStorage.getItem("botflows_token"); // from login
+    const authType = config.authType || "jwt"; // fallback default
+
+    const ws = new WebSocket(
+      `${config.agentServerUrl}/ws/actions?authType=${authType}&token=${encodeURIComponent(authToken)}`
+    );
 
     ws.onopen = () => console.log("WebSocket connected");
     ws.onerror = (err) => console.error("WebSocket error", err);
@@ -162,9 +167,21 @@ export default function StepBuilder({
         url,
       };
       addStep(navigateStep);
+      const token = localStorage.getItem("botflows_token");
+      const authType = config.authType || "jwt";
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (authType === "jwt") {
+        headers["Authorization"] = `Bearer ${token}`;
+      } else if (authType === "api_key") {
+        headers["x-api-key"] = token;
+      }
+
       const res = await fetch(`${config.agentServerUrl}/api/record`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ url }),
       });
       if (!res.ok) throw new Error("Failed to start recording");
@@ -228,9 +245,22 @@ export default function StepBuilder({
 
   const handlePreviewReplay = async () => {
     try {
+      const token = localStorage.getItem("botflows_token");
+      const authType = config.authType || "jwt";
+
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (authType === "jwt") {
+        headers["Authorization"] = `Bearer ${token}`;
+      } else if (authType === "api_key") {
+        headers["x-api-key"] = token;
+      }
+
       const res = await fetch(`${config.agentServerUrl}/api/preview-replay`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(steps),
       });
 

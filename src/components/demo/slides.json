@@ -1,0 +1,8 @@
+[
+  { "file": "ediga_tech_recording_analizing_page.png", "caption": "Visual Recorder – Record browser actions with real-time step tracking" },
+  { "file": "ediga_tech_steps.png", "caption": "Step Editor – Fine-tune recorded steps with labels, values, and dynamic mapping" },
+  { "file": "smart_flows.png", "caption": "Smart Flows – Inject automation logic using grid extraction and filters" },
+  { "file": "smart_flows_grid_filters_2.png", "caption": "Flexible Filters – Create powerful row-based filtering for smart steps" },
+  { "file": "smart_loop_3.png", "caption": "Loop Over Data – Automatically perform actions over matching grid rows" },
+  { "file": "smart_loop_6.png", "caption": "Replay Engine – Fast, resilient execution using robust selectors and recovery" }
+]
