@@ -126,7 +126,7 @@ export default function RecorderDashboard() {
           <button
             className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
             onClick={() => {
-              const url = "https://botflows.app/downloads/BotflowsAgentInstaller.exe";
+              const url = "https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/BotflowsAgentInstaller.exe";
               const link = document.createElement("a");
               link.href = url;
               link.download = "BotflowsAgentInstaller.exe";
