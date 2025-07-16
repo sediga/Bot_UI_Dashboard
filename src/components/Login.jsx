@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import config from "../config";
 import { useAuth } from "../contexts/AuthContext";
+import { useUser } from "../contexts/UserContext";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { setUserId } = useUser();
 
   useEffect(() => {
     if (useAuth?.user) {
@@ -35,7 +37,13 @@ const Login = () => {
 
       const data = await res.json();
       localStorage.setItem("botflows_token", data.token);
+      // Decode JWT to extract user email
+      const payload = JSON.parse(atob(data.token.split('.')[1]));
+      const userId =payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || "0";
 
+      // Save it
+      localStorage.setItem("botflows_userId", userId);
+      setUserId(userId);
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);

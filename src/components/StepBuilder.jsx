@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import config from "../config";
+import StatusPanel from "./StatusPanel";
+import { useUser } from "../contexts/UserContext";
 
 export default function StepBuilder({
   addStep,
@@ -23,6 +25,8 @@ export default function StepBuilder({
   const [pendingStep, setPendingStep] = useState(null);
   const [loopColumns, setLoopColumns] = useState([]);
   const token = localStorage.getItem("botflows_token");
+  const [logs, setLogs] = useState([]);
+  const { userId, setUserId } = useUser();
 
   function hasPlaceholder(val) {
     return typeof val === "string" && /{{\s*[\w.]+\s*}}/.test(val);
@@ -62,14 +66,14 @@ export default function StepBuilder({
   }, []);
 
   useEffect(() => {
-    const authToken = localStorage.getItem("botflows_token"); // from login
+    const authToken = token; // from login
     const authType = config.authType || "jwt"; // fallback default
 
     const ws = new WebSocket(
-      `${config.agentServerUrl}/ws/actions?authType=${authType}&token=${encodeURIComponent(authToken)}`
+      `${config.apiBaseUrl}/ws/connect?type=dashboard&userId=${userId}`
     );
 
-    ws.onopen = () => console.log("WebSocket connected");
+    ws.onopen = () => console.log(`WebSocket connected${userId ? ` for user ${userId}` : ""}`);
     ws.onerror = (err) => console.error("WebSocket error", err);
     ws.onclose = () => console.warn("⚠️ WebSocket closed");
 
@@ -79,6 +83,8 @@ export default function StepBuilder({
 
         if (raw.type === "targetPicked") {
           setPickedTarget(raw);
+          return;
+        }else if (raw.type === "ping") {
           return;
         }
 
@@ -167,7 +173,6 @@ export default function StepBuilder({
         url,
       };
       addStep(navigateStep);
-      const token = localStorage.getItem("botflows_token");
       const authType = config.authType || "jwt";
       const headers = {
         "Content-Type": "application/json",
@@ -245,7 +250,6 @@ export default function StepBuilder({
 
   const handlePreviewReplay = async () => {
     try {
-      const token = localStorage.getItem("botflows_token");
       const authType = config.authType || "jwt";
 
       const headers = {
@@ -301,24 +305,25 @@ const loadFlow = async (selectedFlow) => {
     }
   };
 
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch(`${config.agentServerUrl}/api/status`);
-      const data = await res.json();
-      if (data.recording) setStatus("recording");
-      else if (data.replaying) setStatus("replaying");
-      else if (data.running) setStatus("idle");
-      else setStatus("stopped");
-    } catch {
-      setStatus("unknown");
-    }
-  };
+  // const fetchStatus = async () => {
+  //   try {
+  //     const res = await fetch(`${config.agentServerUrl}/api/status`);
+  //     const data = await res.json();
+  //     if (data.recording) setStatus("recording");
+  //     else if (data.replaying) setStatus("replaying");
+  //     else if (data.running) setStatus("idle");
+  //     else setStatus("stopped");
+  //   } catch {
+  //     setStatus("unknown");
+  //   }
+  // };
 
-  useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
-  }, []);
+
+  // useEffect(() => {
+  //   fetchStatus();
+  //   const interval = setInterval(fetchStatus, 5000);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   return (
     <div className="space-y-4">
@@ -398,6 +403,9 @@ const loadFlow = async (selectedFlow) => {
           </div>
         </div>
       )}
+      <div className="w-full h-full border border-gray-300 rounded bg-white">
+        <StatusPanel status={status} logs={logs} />
+      </div>
     </div>
   );
 }

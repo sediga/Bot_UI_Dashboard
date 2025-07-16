@@ -4,6 +4,7 @@ import StepList from "./StepList";
 import ReplayPanel from "./ReplayPanel";
 import config from "../config";
 import { useAuth } from "../contexts/AuthContext";
+import { useUser } from "../contexts/UserContext";
 
 export default function RecorderDashboard() {
   const [steps, setSteps] = useState([]);
@@ -12,6 +13,7 @@ export default function RecorderDashboard() {
   const [agentStatus, setAgentStatus] = useState("unknown");
   const [pickedTarget, setPickedTarget] = useState(null);
   const { logout } = useAuth();
+  const { userId, setUserId } = useUser();
 
   const actionPriority = (action) => {
     if (action === "type") return 3;

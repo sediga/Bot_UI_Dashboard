@@ -1,21 +1,26 @@
 // src/context/AuthContext.js
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const token = localStorage.getItem("botflows_token");
-    return token ? { token } : null;
+    const userId = localStorage.getItem("botflows_userId");
+    return token && userId ? { token, userId } : null;
   });
 
   const login = (token) => {
     localStorage.setItem("botflows_token", token);
-    setUser({ token });
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const userId = payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || "unknown";
+    localStorage.setItem("botflows_userId", userId);
+    setUser({ token, userId });
   };
 
   const logout = () => {
     localStorage.removeItem("botflows_token");
+    localStorage.removeItem("botflows_userId");
     setUser(null);
   };
 
