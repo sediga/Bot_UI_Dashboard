@@ -3,8 +3,8 @@ import StepBuilder from "./StepBuilder";
 import StepList from "./StepList";
 import ReplayPanel from "./ReplayPanel";
 import config from "../config";
+import Header from "./Header";
 import { useAuth } from "../contexts/AuthContext";
-import { useUser } from "../contexts/UserContext";
 
 export default function RecorderDashboard() {
   const [steps, setSteps] = useState([]);
@@ -12,14 +12,49 @@ export default function RecorderDashboard() {
   const [activeTab, setActiveTab] = useState("create");
   const [agentStatus, setAgentStatus] = useState("unknown");
   const [pickedTarget, setPickedTarget] = useState(null);
-  const { logout } = useAuth();
-  const { userId, setUserId } = useUser();
+  const [logs, setLogs] = useState([]);
+  const [rawMessages, setRawMessages] = useState([]);
+  const token = localStorage.getItem("botflows_token");
+  const { user } = useAuth();
+  const userId = user?.userId;
+  const [pendingTab, setPendingTab] = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const isRecording = agentStatus === "recording";
 
-  const actionPriority = (action) => {
-    if (action === "type") return 3;
-    if (action === "change") return 2;
-    if (action === "focus") return 1;
-    return 0;
+  const stopRecording = async () => {
+    try {
+      const res = await fetch(`${config.agentServerUrl}/api/stop`, {
+        method: "POST",
+      });
+      const result = await res.json();
+      console.log("Recording stopped:", result);
+      setAgentStatus("idle");
+    } catch (err) {
+      console.error("Failed to stop recording:", err);
+    }
+  };
+
+  const handleTabChange = (newTab) => {
+    if (isRecording) {
+      setPendingTab(newTab);       // store tab to switch to
+      setShowConfirm(true);        // trigger confirmation modal
+    } else {
+      setActiveTab(newTab);        // safe to switch directly
+    }
+  };
+
+  const confirmTabSwitch = async () => {
+    setShowConfirm(false);
+    if (pendingTab) {
+      await stopRecording();       // send stop to agent and wait
+      setActiveTab(pendingTab);    // now switch tab
+      setPendingTab(null);
+    }
+  };
+
+  const cancelTabSwitch = () => {
+    setShowConfirm(false);
+    setPendingTab(null);
   };
 
   const normalizeStep = (s) => ({
@@ -69,6 +104,48 @@ export default function RecorderDashboard() {
     setCurrentLoopId(null);
   };
 
+  // useEffect(() => {
+  //   if (activeTab === "create" || activeTab === "replay") {
+  //     setLogs([]); // Clear logs on each tab change
+  //   }
+  // }, [activeTab]);
+  useEffect(() => {
+    if (!userId) return;
+
+    const channels = ["event", "log"];
+    const sockets = {};
+    let isMounted = true;
+
+    channels.forEach((channel) => {
+      const ws = new WebSocket(
+        `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`
+      );
+
+      ws.onopen = () => console.log(`✅ WebSocket connected (${channel})`);
+      ws.onerror = (err) => console.error(`❌ WebSocket error (${channel})`, err);
+      ws.onclose = () => console.warn(`⚠️ WebSocket closed (${channel})`);
+
+      sockets[channel] = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          console.log(`Message received on channel: ${channel}`);
+          const raw = JSON.parse(event.data);
+          if (!isMounted) return;
+
+          setRawMessages((prev) => [...prev, { ...raw, _channel: channel }]); // include channel if useful
+        } catch (err) {
+          console.error(`Failed to parse WebSocket (${channel}) message`, err);
+        }
+      };
+    });
+
+    return () => {
+      isMounted = false;
+      Object.values(sockets).forEach((ws) => ws.close());
+    };
+  }, [userId]);
+
   useEffect(() => {
     const checkAgentStatus = async () => {
       try {
@@ -97,14 +174,15 @@ export default function RecorderDashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
-      <div className="flex space-x-4 px-6 py-2 bg-white border-b">
-        <div className="bg-white px-6 pt-4 shadow-sm">
+    <div className="h-full flex flex-col bg-gray-50 text-gray-800">
+      {/* Tabs (static top, not clipped) */}
+      <div className="shrink-0">
+        <div className="bg-white border-b px-6 py-2">
           <nav className="flex space-x-2" aria-label="Tabs">
             {["create", "replay", "config"].map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabChange(tab)}
                 className={`px-4 py-2 rounded-t-md text-sm font-medium ${
                   activeTab === tab
                     ? "bg-indigo-100 text-indigo-700 shadow-inner border border-b-white"
@@ -119,73 +197,120 @@ export default function RecorderDashboard() {
           </nav>
         </div>
 
+        {/* Agent warning */}
+        {["stopped", "unknown"].includes(agentStatus) && (
+          <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mx-6 my-2 rounded">
+            <p className="font-semibold">Botflows Agent not running.</p>
+            <p className="text-sm mt-1">To enable recording and replay, please install and run the Botflows Agent.</p>
+            <button
+              className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+              onClick={() => {
+                const url =
+                  "https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/BotflowsAgentInstaller.exe";
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = "BotflowsAgentInstaller.exe";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+            >
+              Download Botflows Agent
+            </button>
+
+            <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded">
+              <strong>Important:</strong> This installer is currently not digitally signed.
+              <br />
+              You may see a SmartScreen warning from Windows. To proceed:
+              <ul className="list-disc list-inside mt-1 ml-2 text-sm">
+                <li>Click <em>"More info"</em></li>
+                <li>Then click <em>"Run anyway"</em></li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
 
-      {["stopped", "unknown"].includes(agentStatus) && (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 m-6 rounded">
-          <p className="font-semibold">Botflows Agent not running.</p>
-          <p className="text-sm mt-1">To enable recording and replay, please install and run the Botflows Agent.</p>
-          <button
-            className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-            onClick={() => {
-              const url = "https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/BotflowsAgentInstaller.exe";
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = "BotflowsAgentInstaller.exe";
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }}
-          >
-            Download Botflows Agent
-          </button>
+      {/* Main workspace (scrollable) */}
+      <div className="flex-1 overflow-hidden min-h-0">
+        {activeTab === "create" && (
+          <main className="grid grid-cols-3 gap-4 p-4 h-full w-full">
+            <div className="col-span-1 h-full flex flex-col min-h-0">
+              <StepBuilder
+                addStep={addStep}
+                clearSteps={clearSteps}
+                steps={steps}
+                updateStepWithImprovedSelector={updateStepWithImprovedSelector}
+                setPickedTarget={setPickedTarget}
+                currentLoopId={currentLoopId}
+                setSteps={setSteps}
+                agentStatus={agentStatus}
+                logs={logs}
+                setLogs={setLogs}
+                rawMessages={rawMessages}
+                setRawMessages={setRawMessages}
+              />
+            </div>
 
-          <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded">
-            <strong>Important:</strong> This installer is currently not digitally signed.
-            <br />
-            You may see a SmartScreen warning from Windows. To proceed:
-            <ul className="list-disc list-inside mt-1 ml-2 text-sm">
-              <li>Click <em>"More info"</em></li>
-              <li>Then click <em>"Run anyway"</em></li>
-            </ul>
+            <div className="col-span-2 flex flex-col h-full min-h-0">
+              <div className="flex-1 overflow-y-auto">
+                <StepList
+                  steps={steps}
+                  setSteps={setSteps}
+                  pickedTarget={pickedTarget}
+                  setPickedTarget={setPickedTarget}
+                  agentStatus={agentStatus}
+                  setCurrentLoopId={setCurrentLoopId}
+                  logs={logs}
+                />
+              </div>
+            </div>
+          </main>
+        )}
+
+        {activeTab === "replay" && (
+          <main className="p-6 overflow-auto h-full">
+            <ReplayPanel 
+              agentStatus={agentStatus} 
+              logs={logs} 
+              setLogs={setLogs} 
+              rawMessages={rawMessages} 
+              setRawMessages={setRawMessages} 
+            />
+          </main>
+        )}
+
+        {activeTab === "config" && (
+          <main className="p-6 overflow-auto h-full text-gray-600">
+            <h2 className="text-lg font-semibold mb-2">Configuration</h2>
+            <p>Coming soon: Configure agent settings, integrations, and replay options.</p>
+          </main>
+        )}
+        {showConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">
+              <h2 className="text-lg font-semibold mb-4">Confirm Tab Switch</h2>
+              <p className="mb-4">You are currently recording. Switching tabs will stop the recording. Do you want to proceed?</p>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={cancelTabSwitch}
+                  className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmTabSwitch}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Yes, Stop Recording
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-
-      {activeTab === "create" && (
-        <main className="grid grid-cols-3 gap-4 p-6">
-          <StepBuilder
-            addStep={addStep}
-            clearSteps={clearSteps}
-            steps={steps}
-            updateStepWithImprovedSelector={updateStepWithImprovedSelector}
-            setPickedTarget={setPickedTarget}
-            currentLoopId={currentLoopId}
-            setSteps={setSteps}
-          />
-          <StepList
-            steps={steps}
-            setSteps={setSteps}
-            pickedTarget={pickedTarget}
-            setPickedTarget={setPickedTarget}
-            agentStatus={agentStatus}
-            setCurrentLoopId={setCurrentLoopId}
-          />
-        </main>
-      )}
-
-      {activeTab === "replay" && (
-        <main className="grid grid-cols-3 gap-4 p-6">
-          <ReplayPanel />
-        </main>
-      )}
-
-      {activeTab === "config" && (
-        <main className="p-6 text-gray-600">
-          <h2 className="text-lg font-semibold mb-2">Configuration</h2>
-          <p>Coming soon: Configure agent settings, integrations, and replay options.</p>
-        </main>
-      )}
+        )}      
+      </div>
     </div>
+      
   );
+
 }

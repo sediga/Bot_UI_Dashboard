@@ -5,7 +5,6 @@ import Signup from "./components/Signup";
 import RecorderDashboard from "./components/RecorderDashboard";
 import LandingPage from "./components/LandingPage";
 import ProtectedLayout from "./components/ProtectedLayout";
-import { UserContext } from "./contexts/UserContext";
 
 function App() {
   const [userId, setUserId] = useState(localStorage.getItem("botflows_user_id"));
@@ -20,7 +19,6 @@ function App() {
   }, []);
   
   return (
-    <UserContext.Provider value={{ userId, setUserId }}>
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -36,7 +34,6 @@ function App() {
           />
         </Routes>
       </Router>
-    </UserContext.Provider>
   );
 }
 

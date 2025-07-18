@@ -41,8 +41,9 @@ const ProtectedLayout = ({ children }) => {
   }
 
   return (
-    <div>
-      <header className="bg-gray-800 text-white p-4 flex justify-between items-center">
+    <div className="h-screen flex flex-col">
+      {/* Sticky Header */}
+      <header className="sticky top-0 z-50 bg-gray-800 text-white p-4 flex justify-between items-center shadow">
         <h1 className="text-xl font-bold">Botflows Dashboard</h1>
         <button
           onClick={logout}
@@ -51,9 +52,14 @@ const ProtectedLayout = ({ children }) => {
           Logout
         </button>
       </header>
-      <main className="p-4">{children}</main>
+
+      {/* Main Content Area fills remaining height */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {children}
+      </div>
     </div>
   );
+
 };
 
 export default ProtectedLayout;

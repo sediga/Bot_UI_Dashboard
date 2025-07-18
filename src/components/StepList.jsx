@@ -11,7 +11,7 @@ export default function StepList({
   pickedTarget,
   setPickedTarget,
   agentStatus,
-  setCurrentLoopId,
+  setCurrentLoopId
 }) {
   const [expandedSteps, setExpandedSteps] = useState({});
   const [showSmartWizard, setShowSmartWizard] = useState(false);
@@ -276,83 +276,84 @@ export default function StepList({
   };
 
   return (
-    <section className="col-span-1 bg-white p-4 rounded shadow h-[80vh] overflow-y-auto relative">
-      <h2 className="text-lg font-semibold mb-4">Steps</h2>
-      <ul className="space-y-2 text-sm">
-        {steps
-          .filter((step) => step.parentId === undefined || step.parentId === null)
-          .map((step) => renderStep(step))}
-      </ul>
+    <section className="col-span-1 bg-white p-4 rounded shadow flex flex-col h-full min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <h2 className="text-lg font-semibold mb-4">Steps</h2>
+        <ul className="space-y-2 text-sm">
+          {steps
+            .filter((step) => step.parentId === undefined || step.parentId === null)
+            .map((step) => renderStep(step))}
+        </ul>
 
-      {activeLoopId !== null && (
-        <div className="flex justify-between items-center mt-4 text-sm bg-green-50 border border-green-300 p-2 rounded">
-          <span className="text-green-800">
-            Recording inside loop:{" "}
-            <strong>
-              {steps.find((s) => s.id === activeLoopId)?.name || activeLoopId}
-            </strong>
-          </span>
-          <button onClick={stopLoopRecording} className="text-red-600 underline">
-            Finish Loop Recording
+        {activeLoopId !== null && (
+          <div className="flex justify-between items-center mt-4 text-sm bg-green-50 border border-green-300 p-2 rounded">
+            <span className="text-green-800">
+              Recording inside loop:{" "}
+              <strong>
+                {steps.find((s) => s.id === activeLoopId)?.name || activeLoopId}
+              </strong>
+            </span>
+            <button onClick={stopLoopRecording} className="text-red-600 underline">
+              Finish Loop Recording
+            </button>
+          </div>
+        )}
+
+        <div ref={scrollRef} className="mt-6 border-t pt-4">
+          <h3 className="text-md font-semibold mb-2">Insert Smart Step</h3>
+          <button
+            onClick={() => setShowSmartWizard(true)}
+            className={`px-3 py-1 rounded text-white ${
+              canAddSmartStep ? "bg-blue-600" : "bg-gray-400 cursor-not-allowed"
+            }`}
+            disabled={!canAddSmartStep}
+          >
+            Add Smart Step
           </button>
+          {!canAddSmartStep && (
+            <p className="text-xs text-gray-500 mt-1">
+              Enable recording mode to insert new Smart Step.
+            </p>
+          )}
         </div>
-      )}
 
-      <div ref={scrollRef} className="mt-6 border-t pt-4">
-        <h3 className="text-md font-semibold mb-2">Insert Smart Step</h3>
-        <button
-          onClick={() => setShowSmartWizard(true)}
-          className={`px-3 py-1 rounded text-white ${
-            canAddSmartStep ? "bg-blue-600" : "bg-gray-400 cursor-not-allowed"
-          }`}
-          disabled={!canAddSmartStep}
-        >
-          Add Smart Step
-        </button>
-        {!canAddSmartStep && (
-          <p className="text-xs text-gray-500 mt-1">
-            Enable recording mode to insert new Smart Step.
-          </p>
+        {showSmartWizard && (
+          <Modal onClose={handleCancelWizard}>
+            <SmartStepWizard
+              pickedTarget={pickedTarget}
+              onSmartStepCreated={handleSmartStepCreated}
+              onCancel={handleCancelWizard}
+              onClose={handleCancelWizard}
+              availableExtractSteps={extractSteps}
+            />
+          </Modal>
+        )}
+
+        {showParamModal && (
+          <ParameterMappingModal
+            show={showParamModal}
+            onClose={() => {
+              setShowParamModal(false);
+              setPendingStep(null);
+            }}
+            onSave={(newValue) => {
+              const updatedStep = {
+                ...pendingStep,
+                value: newValue,
+                dynamicValue: newValue,
+                label: `${pendingStep.action.charAt(0).toUpperCase() + pendingStep.action.slice(1)}: ${newValue}`
+              };
+              setSteps((prev) =>
+                prev.map((s) => (s.id === pendingStep.id ? updatedStep : s))
+              );
+              setShowParamModal(false);
+              setPendingStep(null);
+            }}
+            columns={loopColumns}
+            defaultValue={pendingStep?.value || ""}
+          />
         )}
       </div>
-
-      {showSmartWizard && (
-        <Modal onClose={handleCancelWizard}>
-          <SmartStepWizard
-            pickedTarget={pickedTarget}
-            onSmartStepCreated={handleSmartStepCreated}
-            onCancel={handleCancelWizard}
-            onClose={handleCancelWizard}
-            availableExtractSteps={extractSteps}
-          />
-        </Modal>
-      )}
-
-      {showParamModal && (
-        <ParameterMappingModal
-          show={showParamModal}
-          onClose={() => {
-            setShowParamModal(false);
-            setPendingStep(null);
-          }}
-          onSave={(newValue) => {
-            const updatedStep = {
-              ...pendingStep,
-              value: newValue,
-              dynamicValue: newValue,
-              label: `${pendingStep.action.charAt(0).toUpperCase() + pendingStep.action.slice(1)}: ${newValue}`
-            };
-            setSteps((prev) =>
-              prev.map((s) => (s.id === pendingStep.id ? updatedStep : s))
-            );
-            setShowParamModal(false);
-            setPendingStep(null);
-          }}
-          columns={loopColumns}
-          defaultValue={pendingStep?.value || ""}
-        />
-      )}
-
     </section>
   );
 }

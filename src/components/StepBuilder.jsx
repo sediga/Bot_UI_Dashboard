@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import config from "../config";
 import StatusPanel from "./StatusPanel";
-import { useUser } from "../contexts/UserContext";
+import { useAuth } from "../contexts/AuthContext";
+
 
 export default function StepBuilder({
   addStep,
@@ -11,6 +12,11 @@ export default function StepBuilder({
   updateStepWithImprovedSelector,
   setPickedTarget,
   setSteps,
+  agentStatus,
+  logs,
+  setLogs,
+  rawMessages,
+  setRawMessages
 }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
@@ -25,9 +31,10 @@ export default function StepBuilder({
   const [pendingStep, setPendingStep] = useState(null);
   const [loopColumns, setLoopColumns] = useState([]);
   const token = localStorage.getItem("botflows_token");
-  const [logs, setLogs] = useState([]);
-  const { userId, setUserId } = useUser();
-
+  // const [logs, setLogs] = useState([]);
+  const { user } = useAuth();
+  const userId = user?.userId;
+  console.log("builder agentStatus:", agentStatus);
   function hasPlaceholder(val) {
     return typeof val === "string" && /{{\s*[\w.]+\s*}}/.test(val);
   }
@@ -66,103 +73,99 @@ export default function StepBuilder({
   }, []);
 
   useEffect(() => {
-    const authToken = token; // from login
-    const authType = config.authType || "jwt"; // fallback default
+    if (!rawMessages || rawMessages.length === 0) return;
 
-    const ws = new WebSocket(
-      `${config.apiBaseUrl}/ws/connect?type=dashboard&userId=${userId}`
-    );
-
-    ws.onopen = () => console.log(`WebSocket connected${userId ? ` for user ${userId}` : ""}`);
-    ws.onerror = (err) => console.error("WebSocket error", err);
-    ws.onclose = () => console.warn("⚠️ WebSocket closed");
-
-    ws.onmessage = async (event) => {
+    rawMessages.forEach((raw) => {
       try {
-        const raw = JSON.parse(event.data);
+        const channel = raw._channel; // passed from parent
+        const payload = raw.payload || raw;
 
-        if (raw.type === "targetPicked") {
-          setPickedTarget(raw);
-          return;
-        }else if (raw.type === "ping") {
+        if (["log", "event"].includes(channel) && ["ping", "ready"].includes(raw.type)) return;
+
+        if (channel === "log" && raw.type === "log") {
+          setLogs(prev => [...prev, payload.message]);
           return;
         }
 
-        const isSmartColumnClick = raw.type === "clickInColumn";
-
-        const step = {
-          id: crypto.randomUUID(),
-          type: "uiAction",
-          action: raw.action,
-          value: raw.value || null,
-          url: raw.url || null,
-          timestamp: raw.timestamp || Date.now(),
-          label: getStepLabel(raw),
-          selector: raw.selector,
-          selectors: raw.selectors,
-          improvedSelector: raw.improvedSelector,
-          devToolsSelector: raw.devToolsSelector,
-          tagName: raw.tagName,
-          attributes: raw.attributes || {},
-          innerText: raw.innerText,
-          elementText: raw.elementText,
-          classList: raw.classList || [],
-          boundingBox: raw.boundingBox,
-          frameContext: raw.frameContext || null,
-          frameUrl: raw.frameUrl || null,
-          isVisible: raw.isVisible ?? true,
-          computedStyles: raw.computedStyles || {}
-        };
-
-        if (currentLoopId) {
-          step.parentId = currentLoopId;
-
-          // Handle smart column action mapping
-          if (isSmartColumnClick) {
-            step.columnIndex = raw.columnIndex;
-            step.columnHeader = raw.columnHeader;
-            step.isSmartColumn = true;
-            step.smartActionType = raw.actionType || "click";
+        if (channel === "event") {
+          if (payload.type === "targetPicked") {
+            setPickedTarget(payload);
+            return;
           }
 
-          // Handle dynamic mapping fields
-          if (["change", "type", "select", "click"].includes(raw.action)) {
-            const dynamicVal = raw.attributes?.["data-dynamic-value"];
-            if (dynamicVal && dynamicVal.startsWith("{{") && dynamicVal.endsWith("}}")) {
-              step.dynamicValue = dynamicVal;
-              step.isDynamic = true;
-              step.transformType = raw.attributes?.["data-transform-type"] || null;
-              step.transform = raw.attributes?.["data-transform"] || null;
-              step.mappedScope = raw.attributes?.["data-botflows-mapped"] || "global";
+          const isSmartColumnClick = payload.type === "clickInColumn";
+
+          const step = {
+            id: crypto.randomUUID(),
+            type: "uiAction",
+            action: payload.action,
+            value: payload.value || null,
+            url: payload.url || null,
+            timestamp: payload.timestamp || Date.now(),
+            label: getStepLabel(payload),
+            selector: payload.selector,
+            selectors: payload.selectors,
+            improvedSelector: payload.improvedSelector,
+            devToolsSelector: payload.devToolsSelector,
+            tagName: payload.tagName,
+            attributes: payload.attributes || {},
+            innerText: payload.innerText,
+            elementText: payload.elementText,
+            classList: payload.classList || [],
+            boundingBox: payload.boundingBox,
+            frameContext: payload.frameContext || null,
+            frameUrl: payload.frameUrl || null,
+            isVisible: payload.isVisible ?? true,
+            computedStyles: payload.computedStyles || {}
+          };
+
+          if (currentLoopId) {
+            step.parentId = currentLoopId;
+
+            if (isSmartColumnClick) {
+              step.columnIndex = payload.columnIndex;
+              step.columnHeader = payload.columnHeader;
+              step.isSmartColumn = true;
+              step.smartActionType = payload.actionType || "click";
+            }
+
+            if (["change", "type", "select", "click"].includes(payload.action)) {
+              const dynamicVal = payload.attributes?.["data-dynamic-value"];
+              if (dynamicVal?.startsWith("{{") && dynamicVal.endsWith("}}")) {
+                step.dynamicValue = dynamicVal;
+                step.isDynamic = true;
+                step.transformType = payload.attributes?.["data-transform-type"] || null;
+                step.transform = payload.attributes?.["data-transform"] || null;
+                step.mappedScope = payload.attributes?.["data-botflows-mapped"] || "global";
+              }
             }
           }
-        }
 
-        setSteps(prev => [...prev, step]);
+          setSteps(prev => [...prev, step]);
 
-        // Retry label update if needed
-        try {
-          if (!step.label || step.label.includes("Unknown")) {
-            const updatedLabel = getStepLabel(raw);
-            step.label = updatedLabel;
-            updateStepWithImprovedSelector(step.id, { label: updatedLabel });
+          try {
+            if (!step.label || step.label.includes("Unknown")) {
+              const updatedLabel = getStepLabel(payload);
+              step.label = updatedLabel;
+              updateStepWithImprovedSelector(step.id, { label: updatedLabel });
+            }
+          } catch (err) {
+            console.warn("Failed to update label:", err);
           }
-        } catch (err) {
-          console.warn("Failed to update label:", err);
         }
-
       } catch (err) {
-        console.error("Failed to parse WS message:", err);
+        console.error("Failed to process raw message:", err);
       }
-    };
+    });
+    setRawMessages([]);
+  }, [rawMessages]);
 
-    return () => ws.close();
-  }, [addStep, updateStepWithImprovedSelector, setSteps, currentLoopId]);
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
     const url = urlInput.trim();
     const formattedUrl = /^https?:\/\//i.test(url) ? url : `http://${url}`;
+    setLogs([]); 
     setUrlInput(formattedUrl);
 
     try {
@@ -326,86 +329,66 @@ const loadFlow = async (selectedFlow) => {
   // }, []);
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2 items-center">
-        <input
-          type="text"
-          className="border p-2 w-full rounded"
-          placeholder="Enter URL..."
-          value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value)}
-        />
-        <button
-          onClick={handleNavigate}
-          className="bg-blue-600 text-white px-3 py-2 rounded"
-        >
-          Record
-        </button>
-        <button
-          onClick={() => setShowSavePopup(true)}
-          className="bg-green-600 text-white px-3 py-2 rounded"
-        >
-          Save
-        </button>
-        <button
-          onClick={handlePreviewReplay}
-          className="bg-purple-600 text-white px-3 py-2 rounded"
-          disabled={status !== "recording"}
-        >
-          Preview
-        </button>
-      </div>
-
-      <div className="text-sm text-gray-500">Status: {status}</div>
-
-      <div className="border-t pt-4">
-        <label className="block mb-1 font-medium">Load Flow:</label>
-        <select
-          className="border rounded p-2 w-full"
-          value={selectedFlow}
-          onChange={(e) => {
-            setSelectedFlow(e.target.value);
-            loadFlow(e.target.value);
-          }}
-        >
-          <option value="">-- Choose saved flow --</option>
-          {availableFlows.map((flow) => (
-            <option key={flow.path} value={flow.path}>
-              {flow.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {showSavePopup && (
-        <div className="bg-white shadow rounded p-4 space-y-2 border">
-          <label className="block font-medium">Save As:</label>
+    <section className="flex-1 bg-gray-50 p-4 h-full min-h-0 flex flex-col">
+      {/* Top static inputs */}
+      <div className="space-y-4">
+        <div className="flex gap-2 items-center">
           <input
             type="text"
             className="border p-2 w-full rounded"
-            value={saveFileName}
-            onChange={(e) => setSaveFileName(e.target.value)}
-            placeholder="flow_name"
+            placeholder="Enter URL..."
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
           />
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              className="bg-green-600 text-white px-4 py-1 rounded"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setShowSavePopup(false)}
-              className="bg-gray-400 text-white px-4 py-1 rounded"
-            >
-              Cancel
-            </button>
+          <button onClick={handleNavigate} className="bg-blue-600 text-white px-3 py-2 rounded">Record</button>
+          <button onClick={() => setShowSavePopup(true)} className="bg-green-600 text-white px-3 py-2 rounded">Save</button>
+          <button onClick={handlePreviewReplay} className="bg-purple-600 text-white px-3 py-2 rounded">Preview</button>
+        </div>
+
+        <div className="text-sm text-gray-500">Status: {status}</div>
+
+        <div className="border-t pt-4">
+          <label className="block mb-1 font-medium">Load Flow:</label>
+          <select
+            className="border rounded p-2 w-full"
+            value={selectedFlow}
+            onChange={(e) => {
+              setSelectedFlow(e.target.value);
+              loadFlow(e.target.value);
+            }}
+          >
+            <option value="">-- Choose saved flow --</option>
+            {availableFlows.map((flow) => (
+              <option key={flow.path} value={flow.path}>{flow.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Save Popup */}
+      {showSavePopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white shadow rounded p-4 space-y-2 border w-full max-w-sm">
+            <label className="block font-medium">Save As:</label>
+            <input
+              type="text"
+              className="border p-2 w-full rounded"
+              value={saveFileName}
+              onChange={(e) => setSaveFileName(e.target.value)}
+              placeholder="flow_name"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={handleSave} className="bg-green-600 text-white px-4 py-1 rounded">Save</button>
+              <button onClick={() => setShowSavePopup(false)} className="bg-gray-400 text-white px-4 py-1 rounded">Cancel</button>
+            </div>
           </div>
         </div>
       )}
-      <div className="w-full h-full border border-gray-300 rounded bg-white">
-        <StatusPanel status={status} logs={logs} />
+
+      {/* Scrollable logs area */}
+      <div className="flex-1 min-h-0 mt-4 overflow-y-auto">
+        <StatusPanel status={agentStatus} logs={logs} />
       </div>
-    </div>
+    </section>
   );
 }
