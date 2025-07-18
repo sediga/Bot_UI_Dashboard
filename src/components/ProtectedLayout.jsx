@@ -6,14 +6,16 @@ const ProtectedLayout = ({ children }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
-  const logout = () => {
-    localStorage.removeItem("botflows_token");
-    navigate("/login");
-  };
+const logout = () => {
+  localStorage.removeItem("botflows_token");
+  localStorage.removeItem("botflows_user_id");
+  window.location.replace("/login"); // ✅ hard reload without flicker
+};
 
   useEffect(() => {
     const token = localStorage.getItem("botflows_token");
     if (!token) {
+      setLoading(false);
       navigate("/login");
       return;
     }

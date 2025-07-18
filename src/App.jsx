@@ -17,23 +17,25 @@ function App() {
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
-  
+
   return (
-      <Router>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedLayout>
-                <RecorderDashboard />
-              </ProtectedLayout>
-            }
-          />
-        </Routes>
-      </Router>
+    <Router>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Support future nested routes inside dashboard */}
+        <Route
+          path="/dashboard/*"
+          element={
+            <ProtectedLayout>
+              <RecorderDashboard />
+            </ProtectedLayout>
+          }
+        />
+      </Routes>
+    </Router>
   );
 }
 

@@ -1,5 +1,6 @@
 // src/context/AuthContext.js
-import { createContext, useContext, useState } from "react";
+import React, { createContext, useEffect, useState, useContext } from "react";
+import { useNavigate } from "react-router-dom"; // ✅ Correct
 
 const AuthContext = createContext();
 
@@ -9,6 +10,7 @@ export function AuthProvider({ children }) {
     const userId = localStorage.getItem("botflows_userId");
     return token && userId ? { token, userId } : null;
   });
+  const [loading, setLoading] = useState(true);
 
   const login = (token) => {
     localStorage.setItem("botflows_token", token);
@@ -22,8 +24,26 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
     setUser(null);
+    const navigate = useNavigate();
     navigate("/login");
   };
+
+  useEffect(() => {
+    const token = localStorage.getItem("botflows_token");
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    api.get("/api/user/me", token)
+      .then((res) => {
+        setUser(res);
+      })
+      .catch(() => {
+        localStorage.removeItem("botflows_token");
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
