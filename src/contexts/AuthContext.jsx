@@ -35,14 +35,33 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    api.get("/api/user/me", token)
-      .then((res) => {
-        setUser(res);
-      })
-      .catch(() => {
+    const fetchUser = async () => {
+      try {
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "x-api-key": config.apiKey, // if needed
+        };
+
+        const res = await fetch(`${config.apiBaseUrl}/api/me`, {
+          headers,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data);
+        } else {
+          localStorage.removeItem("botflows_token");
+        }
+      } catch (err) {
+        console.error("Error fetching user", err);
         localStorage.removeItem("botflows_token");
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUser(); // 👈 Call the inner async function
   }, []);
 
   return (

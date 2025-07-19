@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRef } from "react";
 import StepBuilder from "./StepBuilder";
 import StepList from "./StepList";
 import ReplayPanel from "./ReplayPanel";
@@ -20,6 +21,9 @@ export default function RecorderDashboard() {
   const [pendingTab, setPendingTab] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const isRecording = agentStatus === "recording";
+  const [replayMessages, setReplayMessages] = useState([]);
+  const [recordMessages, setRecordMessages] = useState([]);
+  const activeTabRef = useRef(activeTab);
 
   const stopRecording = async () => {
     try {
@@ -104,11 +108,17 @@ export default function RecorderDashboard() {
     setCurrentLoopId(null);
   };
 
-  // useEffect(() => {
-  //   if (activeTab === "create" || activeTab === "replay") {
-  //     setLogs([]); // Clear logs on each tab change
-  //   }
-  // }, [activeTab]);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+    if (activeTab === "create") {
+      setRecordMessages([]);
+      setLogs([]);
+    } else if (activeTab === "replay") {
+      setReplayMessages([]);
+      setLogs([]);
+    }    
+  }, [activeTab]);
+
   useEffect(() => {
     if (!userId) return;
 
@@ -133,7 +143,12 @@ export default function RecorderDashboard() {
           const raw = JSON.parse(event.data);
           if (!isMounted) return;
 
-          setRawMessages((prev) => [...prev, { ...raw, _channel: channel }]); // include channel if useful
+          if (activeTabRef.current === "replay") {
+            setReplayMessages((prev) => [...prev, { ...raw, _channel: channel }]);
+          } else if (activeTabRef.current === "create") {
+            setRecordMessages((prev) => [...prev, { ...raw, _channel: channel }]);
+          }
+
         } catch (err) {
           console.error(`Failed to parse WebSocket (${channel}) message`, err);
         }
@@ -247,8 +262,8 @@ export default function RecorderDashboard() {
                 agentStatus={agentStatus}
                 logs={logs}
                 setLogs={setLogs}
-                rawMessages={rawMessages}
-                setRawMessages={setRawMessages}
+                rawMessages={recordMessages}
+                setRawMessages={setRecordMessages}
               />
             </div>
 
@@ -274,8 +289,8 @@ export default function RecorderDashboard() {
               agentStatus={agentStatus} 
               logs={logs} 
               setLogs={setLogs} 
-              rawMessages={rawMessages} 
-              setRawMessages={setRawMessages} 
+              rawMessages={replayMessages} 
+              setRawMessages={setReplayMessages} 
             />
           </main>
         )}
