@@ -143,7 +143,11 @@ export default function StepList({
     return (
       <li
         key={step.id}
-        className={`bg-slate-100 p-3 rounded shadow flex justify-between items-start ${indent}`}
+        className={`p-3 rounded shadow flex justify-between items-start ${indent} ${
+          step.validationStatus === "failed"
+            ? "bg-yellow-50 border-l-4 border-yellow-400"
+            : "bg-slate-100"
+        }`}
       >
         <div className="flex-1 pr-2 space-y-1">
           {step.type === "navigate" && (
@@ -155,17 +159,33 @@ export default function StepList({
 
           {step.type === "uiAction" && (
             <div>
-              <span className="font-medium text-purple-600">{step.action}</span>{" "}
-              →{" "}
-              <span className="text-slate-700">
-                {step.label || (
-                  <span className="text-gray-400 italic">No label</span>
+              <div>
+                <span className="font-medium text-purple-600">{step.action}</span>{" "}
+                →{" "}
+                <span className="text-slate-700">
+                  {step.label || (
+                    <span className="text-gray-400 italic">No label</span>
+                  )}
+                </span>
+                {step.value && (
+                  <span className="text-green-600 ml-1">= "{step.value}"</span>
                 )}
-              </span>
-              {step.value && (
-                <span className="text-green-600 ml-1">= "{step.value}"</span>
-              )}
 
+                {step.validationStatus === "failed" && (
+                  <div className="inline-flex items-center ml-2 text-yellow-600 group relative">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4 fill-yellow-500"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M1 21h22L12 2 1 21zm13-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                    </svg>
+                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                      {step.validationReason || "This action may fail during replay"}
+                    </div>
+                  </div>
+                )}
+              </div>
           {step.isDynamic && (
             <div className="relative group inline-block ml-2">
               <button

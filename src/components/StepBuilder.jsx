@@ -141,6 +141,11 @@ export default function StepBuilder({
             }
           }
 
+          if (payload.metadata?.validation?.status === "failed") {
+            step.validationStatus = "failed";
+            step.validationReason = payload.metadata.validation.reason;
+          }
+
           setSteps(prev => [...prev, step]);
 
           try {

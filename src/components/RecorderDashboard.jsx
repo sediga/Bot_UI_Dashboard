@@ -108,6 +108,52 @@ export default function RecorderDashboard() {
     setCurrentLoopId(null);
   };
 
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 3000; // ms
+
+  function connectWebSocket(channel, isMounted, attempt = 1) {
+    const ws = new WebSocket(
+      `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`
+    );
+
+    ws.onopen = () => {
+      console.log(`✅ WebSocket connected (${channel})`);
+      sockets[channel] = ws;
+    };
+
+    ws.onerror = (err) => {
+      console.error(`❌ WebSocket error (${channel})`, err);
+    };
+
+    ws.onclose = () => {
+      console.warn(`⚠️ WebSocket closed (${channel})`);
+      sockets[channel] = null;
+
+      if (attempt <= MAX_RETRIES) {
+        console.log(`🔁 Reconnecting WebSocket (${channel}), attempt ${attempt}`);
+        setTimeout(() => connectWebSocket(channel, attempt + 1), RETRY_DELAY);
+      } else {
+        console.error(`❌ Max retries reached for WebSocket (${channel})`);
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        console.log(`📨 Message on ${channel}`);
+        const raw = JSON.parse(event.data);
+        if (!isMounted) return;
+
+        if (activeTabRef.current === "replay") {
+          setReplayMessages((prev) => [...prev, { ...raw, _channel: channel }]);
+        } else if (activeTabRef.current === "create") {
+          setRecordMessages((prev) => [...prev, { ...raw, _channel: channel }]);
+        }
+      } catch (err) {
+        console.error(`❌ Failed to parse WS (${channel})`, err);
+      }
+    };
+  }
+
   useEffect(() => {
     activeTabRef.current = activeTab;
     if (activeTab === "create") {
@@ -127,32 +173,7 @@ export default function RecorderDashboard() {
     let isMounted = true;
 
     channels.forEach((channel) => {
-      const ws = new WebSocket(
-        `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`
-      );
-
-      ws.onopen = () => console.log(`✅ WebSocket connected (${channel})`);
-      ws.onerror = (err) => console.error(`❌ WebSocket error (${channel})`, err);
-      ws.onclose = () => console.warn(`⚠️ WebSocket closed (${channel})`);
-
-      sockets[channel] = ws;
-
-      ws.onmessage = (event) => {
-        try {
-          console.log(`Message received on channel: ${channel}`);
-          const raw = JSON.parse(event.data);
-          if (!isMounted) return;
-
-          if (activeTabRef.current === "replay") {
-            setReplayMessages((prev) => [...prev, { ...raw, _channel: channel }]);
-          } else if (activeTabRef.current === "create") {
-            setRecordMessages((prev) => [...prev, { ...raw, _channel: channel }]);
-          }
-
-        } catch (err) {
-          console.error(`Failed to parse WebSocket (${channel}) message`, err);
-        }
-      };
+      connectWebSocket(channel, isMounted);
     });
 
     return () => {

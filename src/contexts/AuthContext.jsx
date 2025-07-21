@@ -13,7 +13,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const login = (token) => {
+    const now = Date.now();
+    const timeoutMinutes = 20; // set your timeout duration
+    const expiry = now + timeoutMinutes * 60 * 1000;
+
     localStorage.setItem("botflows_token", token);
+    localStorage.setItem("botflows_token_expiry", expiry.toString());
     const payload = JSON.parse(atob(token.split('.')[1]));
     const userId = payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || "0";
     localStorage.setItem("botflows_userId", userId);
