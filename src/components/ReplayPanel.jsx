@@ -4,6 +4,8 @@ import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function ReplayPanel({
+  onEnsureWebSocket,
+  isMounted,
   agentStatus, 
   logs, 
   setLogs, 
@@ -41,6 +43,8 @@ export default function ReplayPanel({
   useEffect(() => {
     const fetchSavedFlows = async () => {
       try {
+        await onEnsureWebSocket("event", isMounted);
+        await onEnsureWebSocket("log", isMounted);
         const headers = {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",

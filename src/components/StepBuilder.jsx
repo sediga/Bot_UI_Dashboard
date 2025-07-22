@@ -5,6 +5,8 @@ import { useAuth } from "../contexts/AuthContext";
 
 
 export default function StepBuilder({
+  onEnsureWebSocket,
+  isMounted,
   addStep,
   currentLoopId,
   steps,
@@ -168,6 +170,9 @@ export default function StepBuilder({
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
+    await onEnsureWebSocket("event", isMounted);
+    await onEnsureWebSocket("log", isMounted);
+
     const url = urlInput.trim();
     const formattedUrl = /^https?:\/\//i.test(url) ? url : `http://${url}`;
     setLogs([]); 
@@ -178,7 +183,7 @@ export default function StepBuilder({
       const navigateStep = {
         id: crypto.randomUUID(),
         type: "navigate",
-        url,
+        formattedUrl,
       };
       addStep(navigateStep);
       const authType = config.authType || "jwt";
@@ -195,7 +200,7 @@ export default function StepBuilder({
       const res = await fetch(`${config.agentServerUrl}/api/record`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url : formattedUrl }),
       });
       if (!res.ok) throw new Error("Failed to start recording");
 
@@ -259,6 +264,8 @@ export default function StepBuilder({
   const handlePreviewReplay = async () => {
     try {
       const authType = config.authType || "jwt";
+      await onEnsureWebSocket("event", isMounted);
+      await onEnsureWebSocket("log", isMounted);
 
       const headers = {
         "Content-Type": "application/json",

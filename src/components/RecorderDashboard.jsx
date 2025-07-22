@@ -110,15 +110,39 @@ export default function RecorderDashboard() {
 
   const MAX_RETRIES = 5;
   const RETRY_DELAY = 3000; // ms
+  const socketRef = useRef({});
 
-  function connectWebSocket(channel, isMounted, attempt = 1) {
+  function ensureWebSocket(channel, isMounted) {
+    return new Promise((resolve, reject) => {
+      const existing = socketRef.current[channel];
+      if (existing && existing.readyState === WebSocket.OPEN) {
+        return resolve(existing);
+      }
+
+      connectWebSocket(channel, isMounted);
+      const interval = setInterval(() => {
+        const ws = socketRef.current[channel];
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          clearInterval(interval);
+          resolve(ws);
+        }
+      }, 300);
+
+      setTimeout(() => {
+        clearInterval(interval);
+        reject(`WebSocket connection timeout: ${channel}`);
+      }, 3000);
+    });
+  }
+
+function connectWebSocket(channel, isMounted, attempt = 1) {
     const ws = new WebSocket(
       `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`
     );
 
     ws.onopen = () => {
       console.log(`✅ WebSocket connected (${channel})`);
-      sockets[channel] = ws;
+      socketRef.current[channel] = ws;
     };
 
     ws.onerror = (err) => {
@@ -127,7 +151,7 @@ export default function RecorderDashboard() {
 
     ws.onclose = () => {
       console.warn(`⚠️ WebSocket closed (${channel})`);
-      sockets[channel] = null;
+      socketRef.current[channel] = null;
 
       if (attempt <= MAX_RETRIES) {
         console.log(`🔁 Reconnecting WebSocket (${channel}), attempt ${attempt}`);
@@ -169,7 +193,6 @@ export default function RecorderDashboard() {
     if (!userId) return;
 
     const channels = ["event", "log"];
-    const sockets = {};
     let isMounted = true;
 
     channels.forEach((channel) => {
@@ -178,7 +201,7 @@ export default function RecorderDashboard() {
 
     return () => {
       isMounted = false;
-      Object.values(sockets).forEach((ws) => ws.close());
+      Object.values(socketRef.current).forEach((ws) => ws.close());
     };
   }, [userId]);
 
@@ -273,6 +296,8 @@ export default function RecorderDashboard() {
           <main className="grid grid-cols-3 gap-4 p-4 h-full w-full">
             <div className="col-span-1 h-full flex flex-col min-h-0">
               <StepBuilder
+                onEnsureWebSocket={ensureWebSocket}
+                isMounted={true}
                 addStep={addStep}
                 clearSteps={clearSteps}
                 steps={steps}
@@ -307,6 +332,8 @@ export default function RecorderDashboard() {
         {activeTab === "replay" && (
           <main className="p-6 overflow-auto h-full">
             <ReplayPanel 
+              onEnsureWebSocket={ensureWebSocket}
+              isMounted={true}
               agentStatus={agentStatus} 
               logs={logs} 
               setLogs={setLogs} 
