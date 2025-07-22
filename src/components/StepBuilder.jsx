@@ -183,7 +183,7 @@ export default function StepBuilder({
       const navigateStep = {
         id: crypto.randomUUID(),
         type: "navigate",
-        formattedUrl,
+        url: formattedUrl,
       };
       addStep(navigateStep);
       const authType = config.authType || "jwt";
