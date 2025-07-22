@@ -5,12 +5,12 @@ import config from "../config";
 const ProtectedLayout = ({ children }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-
-const logout = () => {
-  localStorage.removeItem("botflows_token");
-  localStorage.removeItem("botflows_user_id");
-  window.location.replace("/login"); // ✅ hard reload without flicker
-};
+  const [email, setEmail] = useState("");
+  const logout = () => {
+    localStorage.removeItem("botflows_token");
+    localStorage.removeItem("botflows_user_id");
+    window.location.replace("/login"); // ✅ hard reload without flicker
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("botflows_token");
@@ -31,7 +31,10 @@ const logout = () => {
         if (!res.ok) throw new Error();
         return res.json();
       })
-      .then(() => setLoading(false))
+      .then((data) => {
+        setEmail(data.username || "");  // ✅ assuming response contains { email: "..." }
+        setLoading(false)
+      })
       .catch(() => {
         localStorage.removeItem("botflows_token");
         navigate("/login");
@@ -46,13 +49,19 @@ const logout = () => {
     <div className="h-screen flex flex-col">
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-gray-800 text-white p-4 flex justify-between items-center shadow">
-        <h1 className="text-xl font-bold">Botflows Dashboard</h1>
-        <button
-          onClick={logout}
-          className="bg-red-600 px-3 py-1 rounded hover:bg-red-700"
-        >
-          Logout
-        </button>
+        <div className="flex items-center space-x-4">
+          <h1 className="text-xl font-bold">Botflows Dashboard</h1>
+        </div> 
+        {/* Right side */}
+        <div className="flex items-center space-x-4">
+          {email && <span className="text-sm text-white">{email}</span>}
+          <button
+            onClick={logout}
+            className="bg-red-600 px-3 py-1 rounded hover:bg-red-700"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area fills remaining height */}
