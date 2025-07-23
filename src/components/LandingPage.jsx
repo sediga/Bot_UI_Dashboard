@@ -3,14 +3,14 @@ import FeatureCarousel from "./demo/FeatureCarousel";
 
 const Landing = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-indigo-100 to-indigo-200 flex flex-col justify-center items-center px-6 py-10 text-center">
+    <div className="min-h-screen overflow-y-auto bg-gradient-to-br from-white via-indigo-100 to-indigo-200 flex flex-col justify-center items-center px-4 py-4 text-center">
       <div className="max-w-4xl">
-        <h1 className="text-5xl font-bold text-indigo-800 mb-4">Welcome to Botflows</h1>
-        <p className="text-xl text-gray-700 mb-8">
+        <h1 className="text-4xl font-bold text-indigo-800 mb-5">Welcome to Botflows</h1>
+        <p className="text-xl text-gray-700 mb-3">
           Automate smarter, not harder. Botflows lets you <strong>record, replay, and manage complex browser workflows</strong> without writing code.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-left mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-left mb-4">
           <div className="bg-white rounded shadow p-4">
             <h3 className="font-semibold text-indigo-700 mb-2">🎯 Smart Recording</h3>
             <p className="text-sm text-gray-600">Capture browser actions with intelligent selectors and DOM context awareness.</p>
@@ -26,10 +26,8 @@ const Landing = () => {
         </div>
 
         {/* Placeholder for future animation/video */}
-        <div className="mb-10">
-          <div className="w-full h-64 bg-gray-300 rounded-lg flex items-center justify-center text-gray-500 italic">
-              <FeatureCarousel />
-          </div>
+        <div className="w-full max-w-6xl h-[55vh] mx-auto">
+          <FeatureCarousel />
         </div>
 
         <div className="space-x-4">
