@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { useNavigate, BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./components/Login";
 import Signup from "./components/Signup";
 import RecorderDashboard from "./components/RecorderDashboard";
 import LandingPage from "./components/LandingPage";
 import ProtectedLayout from "./components/ProtectedLayout";
+import config from "./config";
+
 const SessionTimeout = () => {
   const navigate = useNavigate();
 
@@ -42,21 +45,23 @@ function App() {
   return (
     <Router>
       <SessionTimeout />
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+      <GoogleOAuthProvider clientId={config.googleClientId}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
-        {/* Support future nested routes inside dashboard */}
-        <Route
-          path="/dashboard/*"
-          element={
-            <ProtectedLayout>
-              <RecorderDashboard />
-            </ProtectedLayout>
-          }
-        />
-      </Routes>
+          {/* Support future nested routes inside dashboard */}
+          <Route
+            path="/dashboard/*"
+            element={
+              <ProtectedLayout>
+                <RecorderDashboard />
+              </ProtectedLayout>
+            }
+          />
+        </Routes>
+      </GoogleOAuthProvider>
     </Router>
   );
 }

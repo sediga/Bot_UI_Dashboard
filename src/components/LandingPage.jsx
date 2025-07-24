@@ -18,16 +18,16 @@ const Landing = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-left mb-4">
           <div className="bg-white rounded shadow p-4">
-            <h3 className="font-semibold text-indigo-700 mb-2">🎯 Smart Recording</h3>
-            <p className="text-sm text-gray-600">Capture browser actions with intelligent selectors and DOM context awareness.</p>
+            <h3 className="font-semibold text-indigo-700 mb-2">🧠 Smart Recording</h3>
+            <p className="text-sm text-gray-600">Record intuitive automation steps with support for loops, filters, and dynamic data.</p>
           </div>
           <div className="bg-white rounded shadow p-4">
             <h3 className="font-semibold text-indigo-700 mb-2">🔁 Reliable Replay</h3>
-            <p className="text-sm text-gray-600">Play back flows even across single-page apps, dynamic content, and nested iframes.</p>
+            <p className="text-sm text-gray-600">Run automations confidently with fallback selectors and AI-powered recovery.</p>
           </div>
           <div className="bg-white rounded shadow p-4">
-            <h3 className="font-semibold text-indigo-700 mb-2">📦 Flow Management</h3>
-            <p className="text-sm text-gray-600">Organize, edit, and reuse your automations with loop support and data injection.</p>
+            <h3 className="font-semibold text-indigo-700 mb-2">🛠️ Flow Orchestration</h3>
+            <p className="text-sm text-gray-600">Configure flows to run in the cloud or on local agents — on-demand or on a schedule.</p>
           </div>
         </div>
 

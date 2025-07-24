@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import config from "../config";
 import { useAuth } from "../contexts/AuthContext";
+import { GoogleLogin } from "@react-oauth/google";
+import { jwtDecode } from "jwt-decode";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -9,6 +11,34 @@ const Login = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { user, login } = useAuth();
+
+  const handleGoogleLoginSuccess = async (credentialResponse) => {
+    try {
+      const decoded = jwtDecode(credentialResponse.credential);
+      console.log("Google user:", decoded);
+
+      const res = await fetch(`${config.apiBaseUrl}/api/auth/google`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": config.apiKey,
+        },
+        body: JSON.stringify({ token: credentialResponse.credential }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Google login failed");
+      }
+
+      const data = await res.json();
+      login(data.token);
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Google login failed:", err);
+      setError(err.message);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -79,6 +109,12 @@ const Login = () => {
             Sign up
           </a>
         </p>
+        <div className="mt-4 flex justify-center">
+          <GoogleLogin
+            onSuccess={handleGoogleLoginSuccess}
+            onError={() => console.error("Google login error")}
+          />
+        </div>
       </form>
     </div>
   );
