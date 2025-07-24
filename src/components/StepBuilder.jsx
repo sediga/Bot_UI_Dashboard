@@ -62,18 +62,28 @@ export default function StepBuilder({
         const headers = {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          "x-api-key": `${config.apiKey}` // Load from env later
+          "x-api-key": config.apiKey
         };
+
         const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, { headers });
+        if (!res.ok) {
+          console.warn("Fetch failed:", res.status);
+          return;
+        }
+
         const data = await res.json();
-        if (Array.isArray(data)) setAvailableFlows(data);
+        if (Array.isArray(data)) {
+          setAvailableFlows(data);
+        } else {
+          console.warn("Unexpected data format:", data);
+        }
       } catch (err) {
         console.error("Failed to fetch flow list", err);
       }
     };
 
     fetchFlows();
-  }, []);
+  }, [token]);
 
   console.log("🔄 render", rawMessages);
 

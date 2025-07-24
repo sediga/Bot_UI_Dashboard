@@ -232,6 +232,39 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
     return () => clearInterval(interval);
   }, []);
 
+  const [leftWidth, setLeftWidth] = useState(null); // null initially
+  const [layoutReady, setLayoutReady] = useState(false);
+  const leftPanelRef = useRef(null);
+  const isResizing = useRef(false);
+  const startResizing = () => {
+    isResizing.current = true;
+    document.addEventListener("mousemove", handleResizing);
+    document.addEventListener("mouseup", stopResizing);
+  };
+
+  useEffect(() => {
+    const saved = localStorage.getItem("botflows_left_panel_width");
+    const initial = saved ? parseInt(saved, 10) : 400;
+    setLeftWidth(initial);
+    setLayoutReady(true);
+  }, []);
+
+  if (!layoutReady) return null; 
+
+  const handleResizing = (e) => {
+    if (!isResizing.current) return;
+    const newWidth = Math.min(Math.max(200, e.clientX), window.innerWidth - 200);
+    setLeftWidth(newWidth);
+    localStorage.setItem("botflows_left_panel_width", newWidth);
+  };
+
+  const stopResizing = () => {
+    isResizing.current = false;
+    document.removeEventListener("mousemove", handleResizing);
+    document.removeEventListener("mouseup", stopResizing);
+  };
+
+  
   return (
     <div className="h-full flex flex-col bg-gray-50 text-gray-800">
       {/* Tabs (static top, not clipped) */}
@@ -293,40 +326,52 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
       {/* Main workspace (scrollable) */}
       <div className="flex-1 overflow-hidden min-h-0">
         {activeTab === "create" && (
-          <main className="grid grid-cols-3 gap-4 p-4 h-full w-full">
-            <div className="col-span-1 h-full flex flex-col min-h-0">
-              <StepBuilder
-                onEnsureWebSocket={ensureWebSocket}
-                isMounted={true}
-                addStep={addStep}
-                clearSteps={clearSteps}
+        <main className="flex h-full w-full overflow-hidden">
+          {/* Left Panel (StepBuilder) */}
+          <div
+            ref={leftPanelRef}
+            className="h-full min-w-[200px] max-w-[80%] overflow-auto"
+            style={{ width: leftWidth }}
+          >
+            <StepBuilder
+              onEnsureWebSocket={ensureWebSocket}
+              isMounted={true}
+              addStep={addStep}
+              clearSteps={clearSteps}
+              steps={steps}
+              updateStepWithImprovedSelector={updateStepWithImprovedSelector}
+              setPickedTarget={setPickedTarget}
+              currentLoopId={currentLoopId}
+              setSteps={setSteps}
+              agentStatus={agentStatus}
+              logs={logs}
+              setLogs={setLogs}
+              rawMessages={recordMessages}
+              setRawMessages={setRecordMessages}
+            />
+          </div>
+
+          {/* Draggable Divider */}
+          <div
+            className="w-2 cursor-col-resize bg-gray-300"
+            onMouseDown={startResizing}
+          />
+
+          {/* Right Panel (StepList) */}
+          <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
+            <div className="flex-1 overflow-y-auto">
+              <StepList
                 steps={steps}
-                updateStepWithImprovedSelector={updateStepWithImprovedSelector}
-                setPickedTarget={setPickedTarget}
-                currentLoopId={currentLoopId}
                 setSteps={setSteps}
+                pickedTarget={pickedTarget}
+                setPickedTarget={setPickedTarget}
                 agentStatus={agentStatus}
+                setCurrentLoopId={setCurrentLoopId}
                 logs={logs}
-                setLogs={setLogs}
-                rawMessages={recordMessages}
-                setRawMessages={setRecordMessages}
               />
             </div>
-
-            <div className="col-span-2 flex flex-col h-full min-h-0">
-              <div className="flex-1 overflow-y-auto">
-                <StepList
-                  steps={steps}
-                  setSteps={setSteps}
-                  pickedTarget={pickedTarget}
-                  setPickedTarget={setPickedTarget}
-                  agentStatus={agentStatus}
-                  setCurrentLoopId={setCurrentLoopId}
-                  logs={logs}
-                />
-              </div>
-            </div>
-          </main>
+          </div>
+        </main>
         )}
 
         {activeTab === "replay" && (
