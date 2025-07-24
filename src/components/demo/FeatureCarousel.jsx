@@ -20,7 +20,7 @@ const VideoModal = ({ isOpen, onClose }) => {
           autoPlay
         >
           <source
-            src="/assets/slides/onboard/basic_flow/botflows_demo.mp4"
+            src="/assets/slides/onboard/basic_flow/botflows_demo_1.mp4"
             type="video/mp4"
           />
           Your browser does not support the video tag.
