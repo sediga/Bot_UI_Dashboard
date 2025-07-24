@@ -9,7 +9,7 @@ const ProtectedLayout = ({ children }) => {
   const logout = () => {
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_user_id");
-    window.location.replace("/login"); // ✅ hard reload without flicker
+    window.location.replace("/"); // ✅ hard reload without flicker
   };
 
   useEffect(() => {
