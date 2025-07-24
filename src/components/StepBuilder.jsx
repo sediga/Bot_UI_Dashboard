@@ -36,6 +36,7 @@ export default function StepBuilder({
   // const [logs, setLogs] = useState([]);
   const { user } = useAuth();
   const userId = user?.userId;
+  const messageQueueRef = useRef([]);
   console.log("builder agentStatus:", agentStatus);
   function hasPlaceholder(val) {
     return typeof val === "string" && /{{\s*[\w.]+\s*}}/.test(val);
@@ -74,99 +75,117 @@ export default function StepBuilder({
     fetchFlows();
   }, []);
 
+  console.log("🔄 render", rawMessages);
+
   useEffect(() => {
-    if (!rawMessages || rawMessages.length === 0) return;
+    const interval = setInterval(() => {
+      if (messageQueueRef.current.length === 0) return;
 
-    rawMessages.forEach((raw) => {
-      try {
-        const channel = raw._channel; // passed from parent
-        const payload = raw.payload || raw;
+      const newSteps = [];
 
-        if (["log", "event"].includes(channel) && ["ping", "ready"].includes(raw.type)) return;
+      messageQueueRef.current.forEach((raw) => {
+        try {
+          const channel = raw._channel;
+          const payload = raw.payload || raw;
 
-        if (channel === "log" && raw.type === "log") {
-          setLogs(prev => [...prev, payload.message]);
-          return;
-        }
+          if (["log", "event"].includes(channel) && ["ping", "ready"].includes(raw.type)) return;
 
-        if (channel === "event") {
-          if (payload.type === "targetPicked") {
-            setPickedTarget(payload);
+          if (channel === "log" && raw.type === "log") {
+            setLogs(prev => [...prev, payload.message]);
             return;
           }
 
-          const isSmartColumnClick = payload.type === "clickInColumn";
-
-          const step = {
-            id: crypto.randomUUID(),
-            type: "uiAction",
-            action: payload.action,
-            value: payload.value || null,
-            url: payload.url || null,
-            timestamp: payload.timestamp || Date.now(),
-            label: getStepLabel(payload),
-            selector: payload.selector,
-            selectors: payload.selectors,
-            improvedSelector: payload.improvedSelector,
-            devToolsSelector: payload.devToolsSelector,
-            tagName: payload.tagName,
-            attributes: payload.attributes || {},
-            innerText: payload.innerText,
-            elementText: payload.elementText,
-            classList: payload.classList || [],
-            boundingBox: payload.boundingBox,
-            frameContext: payload.frameContext || null,
-            frameUrl: payload.frameUrl || null,
-            isVisible: payload.isVisible ?? true,
-            computedStyles: payload.computedStyles || {}
-          };
-
-          if (currentLoopId) {
-            step.parentId = currentLoopId;
-
-            if (isSmartColumnClick) {
-              step.columnIndex = payload.columnIndex;
-              step.columnHeader = payload.columnHeader;
-              step.isSmartColumn = true;
-              step.smartActionType = payload.actionType || "click";
+          if (channel === "event") {
+            if (payload.type === "targetPicked") {
+              setPickedTarget(payload);
+              return;
             }
 
-            if (["change", "type", "select", "click"].includes(payload.action)) {
-              const dynamicVal = payload.attributes?.["data-dynamic-value"];
-              if (dynamicVal?.startsWith("{{") && dynamicVal.endsWith("}}")) {
-                step.dynamicValue = dynamicVal;
-                step.isDynamic = true;
-                step.transformType = payload.attributes?.["data-transform-type"] || null;
-                step.transform = payload.attributes?.["data-transform"] || null;
-                step.mappedScope = payload.attributes?.["data-botflows-mapped"] || "global";
+            const isSmartColumnClick = payload.type === "clickInColumn";
+
+            const step = {
+              id: crypto.randomUUID(),
+              type: "uiAction",
+              action: payload.action,
+              value: payload.value || null,
+              url: payload.url || null,
+              timestamp: payload.timestamp || Date.now(),
+              label: getStepLabel(payload),
+              selector: payload.selector,
+              selectors: payload.selectors,
+              improvedSelector: payload.improvedSelector,
+              devToolsSelector: payload.devToolsSelector,
+              tagName: payload.tagName,
+              attributes: payload.attributes || {},
+              innerText: payload.innerText,
+              elementText: payload.elementText,
+              classList: payload.classList || [],
+              boundingBox: payload.boundingBox,
+              frameContext: payload.frameContext || null,
+              frameUrl: payload.frameUrl || null,
+              isVisible: payload.isVisible ?? true,
+              computedStyles: payload.computedStyles || {}
+            };
+
+            if (currentLoopId) {
+              step.parentId = currentLoopId;
+
+              if (isSmartColumnClick) {
+                step.columnIndex = payload.columnIndex;
+                step.columnHeader = payload.columnHeader;
+                step.isSmartColumn = true;
+                step.smartActionType = payload.actionType || "click";
+              }
+
+              if (["change", "type", "select", "click"].includes(payload.action)) {
+                const dynamicVal = payload.attributes?.["data-dynamic-value"];
+                if (dynamicVal?.startsWith("{{") && dynamicVal.endsWith("}}")) {
+                  step.dynamicValue = dynamicVal;
+                  step.isDynamic = true;
+                  step.transformType = payload.attributes?.["data-transform-type"] || null;
+                  step.transform = payload.attributes?.["data-transform"] || null;
+                  step.mappedScope = payload.attributes?.["data-botflows-mapped"] || "global";
+                }
               }
             }
-          }
 
-          if (payload.metadata?.validation?.status === "failed") {
-            step.validationStatus = "failed";
-            step.validationReason = payload.metadata.validation.reason;
-          }
-
-          setSteps(prev => [...prev, step]);
-
-          try {
-            if (!step.label || step.label.includes("Unknown")) {
-              const updatedLabel = getStepLabel(payload);
-              step.label = updatedLabel;
-              updateStepWithImprovedSelector(step.id, { label: updatedLabel });
+            if (payload.metadata?.validation?.status === "failed") {
+              step.validationStatus = "failed";
+              step.validationReason = payload.metadata.validation.reason;
             }
-          } catch (err) {
-            console.warn("Failed to update label:", err);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to process raw message:", err);
-      }
-    });
-    setRawMessages([]);
-  }, [rawMessages]);
 
+            newSteps.push(step);
+
+            try {
+              if (!step.label || step.label.includes("Unknown")) {
+                const updatedLabel = getStepLabel(payload);
+                step.label = updatedLabel;
+                updateStepWithImprovedSelector(step.id, { label: updatedLabel });
+              }
+            } catch (err) {
+              console.warn("Failed to update label:", err);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to process raw message:", err);
+        }
+      });
+
+      if (newSteps.length > 0) {
+        setSteps(prev => [...prev, ...newSteps]);
+      }
+
+      messageQueueRef.current = [];
+    }, 100); // Adjust interval if needed
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!rawMessages || rawMessages.length === 0) return;
+    messageQueueRef.current.push(...rawMessages);
+    setRawMessages([]); // still reset so dashboard can collect fresh ones
+  }, [rawMessages]);
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
@@ -247,6 +266,12 @@ export default function StepBuilder({
         headers,
         body: JSON.stringify({ filename: cleanName, steps }),
       });
+
+      const resAgent = await fetch(`${config.agentServerUrl}/api/stop`, {
+        method: "POST",
+        headers
+      });
+      if (!resAgent.ok) throw new Error("Failed to stop recording");
 
       const data = await res.json();
       alert(data.message || "Flow saved.");

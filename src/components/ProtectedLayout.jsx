@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import config from "../config";
 
 const ProtectedLayout = ({ children }) => {
@@ -50,8 +50,13 @@ const ProtectedLayout = ({ children }) => {
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-gray-800 text-white p-4 flex justify-between items-center shadow">
         <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-bold">Botflows Dashboard</h1>
-        </div> 
+          <Link to="/" className="flex items-center space-x-0">
+            <img src="/assets/logo.png" alt="Botflows Logo" className="h-8" />
+            <span className="text-white text-xl font-semibold">
+              otflows Dashboard
+            </span>
+          </Link>
+        </div>
         {/* Right side */}
         <div className="flex items-center space-x-4">
           {email && <span className="text-sm text-white">{email}</span>}

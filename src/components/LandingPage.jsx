@@ -5,7 +5,13 @@ const Landing = () => {
   return (
     <div className="min-h-screen overflow-y-auto bg-gradient-to-br from-white via-indigo-100 to-indigo-200 flex flex-col justify-center items-center px-4 py-4 text-center">
       <div className="max-w-4xl">
-        <h1 className="text-4xl font-bold text-indigo-800 mb-5">Welcome to Botflows</h1>
+        <h1 className="text-4xl font-bold text-indigo-800 mb-5 flex items-center gap-2 justify-center">
+          Welcome to 
+          <span className="inline-flex items-center">
+            <img src="/assets/logo.png" alt="B" className="h-8 block" />
+            <span className="text-indigo-800 font-bold text-4xl -ml-0">otflows</span>
+          </span>
+        </h1>
         <p className="text-xl text-gray-700 mb-3">
           Automate smarter, not harder. Botflows lets you <strong>record, replay, and manage complex browser workflows</strong> without writing code.
         </p>
