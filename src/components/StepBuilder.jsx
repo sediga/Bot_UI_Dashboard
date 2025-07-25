@@ -312,12 +312,23 @@ export default function StepBuilder({
         headers["x-api-key"] = token;
       }
 
+      const resOverlay = await fetch(`${config.agentServerUrl}/api/overlay/show`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ message: "Previewing now, Will resume after..." }),
+      });
+      console.log(`overlay response : (${ resOverlay.json()})`)
       const res = await fetch(`${config.agentServerUrl}/api/preview-replay`, {
         method: "POST",
         headers,
         body: JSON.stringify(steps),
       });
 
+      const resOverlayStop = await fetch(`${config.agentServerUrl}/api/overlay/hide`, {
+        method: "POST",
+        headers
+      });
+      
       const result = await res.json();
       if (result.status !== "ok") {
         alert("Preview failed: " + result.details);

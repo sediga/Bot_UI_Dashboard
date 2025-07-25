@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import config from "../config";
 import { useAuth } from "../contexts/AuthContext";
 import { GoogleLogin } from "@react-oauth/google";
@@ -23,6 +23,7 @@ const Login = () => {
           "Content-Type": "application/json",
           "x-api-key": config.apiKey,
         },
+        credentials: "include", // 🔧 add this
         body: JSON.stringify({ token: credentialResponse.credential }),
       });
 
@@ -105,9 +106,9 @@ const Login = () => {
         </button>
         <p className="text-sm mt-4">
           Don't have an account?{" "}
-          <a className="text-blue-600" href="/signup">
+          <Link className="text-blue-600" to="/signup">
             Sign up
-          </a>
+          </Link>
         </p>
         <div className="mt-4 flex justify-center">
           <GoogleLogin

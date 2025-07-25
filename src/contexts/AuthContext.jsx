@@ -17,7 +17,6 @@ export function AuthProvider({ children }) {
     const now = Date.now();
     const timeoutMinutes = 20; // set your timeout duration
     const expiry = now + timeoutMinutes * 60 * 1000;
-
     localStorage.setItem("botflows_token", token);
     localStorage.setItem("botflows_token_expiry", expiry.toString());
     const payload = JSON.parse(atob(token.split('.')[1]));
@@ -30,8 +29,6 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
     setUser(null);
-    const navigate = useNavigate();
-    navigate("/login");
   };
 
   useEffect(() => {
