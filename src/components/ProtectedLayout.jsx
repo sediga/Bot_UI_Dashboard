@@ -17,6 +17,14 @@ const ProtectedLayout = ({ children }) => {
   };
 
   useEffect(() => {
+    const reason = localStorage.getItem("logout_reason");
+    if (reason === "inactivity") {
+      alert("You've been logged out due to inactivity. All unsaved changes were discarded.");
+      localStorage.removeItem("logout_reason"); // Clean it
+    }
+  }, []);
+  
+  useEffect(() => {
     const token = localStorage.getItem("botflows_token");
     if (!token) {
       setLoading(false);

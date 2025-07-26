@@ -11,11 +11,11 @@ export default function StepList({
   pickedTarget,
   setPickedTarget,
   agentStatus,
+  currentLoopId,
   setCurrentLoopId
 }) {
   const [expandedSteps, setExpandedSteps] = useState({});
   const [showSmartWizard, setShowSmartWizard] = useState(false);
-  const [activeLoopId, setActiveLoopId] = useState(null);
   const [finalizedLoops, setFinalizedLoops] = useState(new Set());
   const scrollRef = useRef(null);
   const [showParamModal, setShowParamModal] = useState(false);
@@ -89,7 +89,7 @@ export default function StepList({
 
   const extractSteps = steps.filter((step) => step.type === "gridExtract");
   const canAddSmartStep =
-    agentStatus === "recording" && !showSmartWizard && activeLoopId === null;
+    agentStatus === "recording" && !showSmartWizard && currentLoopId === null;
 
   const startLoopRecording = async (step) => {
     try {
@@ -98,7 +98,6 @@ export default function StepList({
       //   headers: { "Content-Type": "application/json" },
       //   body: JSON.stringify({ loopName: step.name }),
       // });
-      setActiveLoopId(step.id);
       setCurrentLoopId(step.id);
     } catch (err) {
       console.error("Failed to start loop recording", err);
@@ -106,7 +105,7 @@ export default function StepList({
   };
 
   const stopLoopRecording = async () => {
-    const hasSteps = steps.some((s) => s.parentId === activeLoopId);
+    const hasSteps = steps.some((s) => s.parentId === currentLoopId);
 
     if (!hasSteps) {
       const confirmDelete = window.confirm(
@@ -115,11 +114,11 @@ export default function StepList({
       if (!confirmDelete) return;
 
       const updatedSteps = steps.filter(
-        (s) => s.id !== activeLoopId && s.parentId !== activeLoopId
+        (s) => s.id !== currentLoopId && s.parentId !== currentLoopId
       );
       setSteps(updatedSteps);
     } else {
-      setFinalizedLoops((prev) => new Set(prev).add(activeLoopId));
+      setFinalizedLoops((prev) => new Set(prev).add(currentLoopId));
     }
 
     try {
@@ -130,14 +129,13 @@ export default function StepList({
       console.error("Failed to end loop recording", err);
     }
 
-    setActiveLoopId(null);
     setCurrentLoopId(null);
   };
 
   const renderStep = (step, level = 0) => {
     const indent = `ml-${level * 4}`;
     const hasChildren = steps.some((s) => s.parentId === step.id);
-    const isRecording = activeLoopId === step.id;
+    const isRecording = currentLoopId === step.id;
     const isFinalized = finalizedLoops.has(step.id);
 
     return (
@@ -222,8 +220,8 @@ export default function StepList({
               >
                 {expandedSteps[step.id] ? "[−]" : "[+]"}
               </button>
-              <div className="flex-1">
-                <div className="font-semibold text-orange-600">
+              <div className="flex-1 bg-green-50">
+                <div className="font-semibold text-green-700">
                   {step.name || `Loop (${step.source || step.id})`}
                 </div>
 
@@ -248,8 +246,8 @@ export default function StepList({
 
 
           {step.type === "gridExtract" && (
-            <div className="p-2 rounded border bg-blue-50">
-              <div className="font-semibold text-blue-700">
+            <div className="p-2 rounded border bg-green-50">
+              <div className="font-semibold text-green-700">
                 {step.name || `Grid Extract (${step.id})`}
               </div>
               <div className="text-xs text-gray-600 mb-2">
@@ -273,6 +271,34 @@ export default function StepList({
                           : f.column}{" "}
                         {f.operator} "{f.value}"
                       </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step.type === "exportData" && (
+            <div className="p-2 rounded border bg-green-50">
+              <div className="font-semibold text-green-700">
+                {step.name || `Export Data (${step.id})`}
+              </div>
+              <div className="text-xs text-gray-600 mb-2">
+                <strong>ID:</strong> <code>{step.id}</code>
+              </div>
+              <ul className="text-sm list-disc pl-4 mb-2">
+                <li><strong>Source Step:</strong> {step.source}</li>
+                <li><strong>Format:</strong> {step.format}</li>
+                <li><strong>Filename:</strong> {step.filename}</li>
+                <li><strong>Append Timestamp:</strong> {step.appendTimestamp ? "Yes" : "No"}</li>
+                <li><strong>Overwrite if Exists:</strong> {step.overwrite ? "Yes" : "No"}</li>
+              </ul>
+              {step.columns?.length > 0 && (
+                <div className="text-sm">
+                  <p className="font-medium mb-1">Columns to Export:</p>
+                  <ul className="list-disc pl-4">
+                    {step.columns.map((col, idx) => (
+                      <li key={idx}>{col}</li>
                     ))}
                   </ul>
                 </div>
@@ -305,12 +331,12 @@ export default function StepList({
             .map((step) => renderStep(step))}
         </ul>
 
-        {activeLoopId !== null && (
+        {currentLoopId !== null && (
           <div className="flex justify-between items-center mt-4 text-sm bg-green-50 border border-green-300 p-2 rounded">
             <span className="text-green-800">
               Recording inside loop:{" "}
               <strong>
-                {steps.find((s) => s.id === activeLoopId)?.name || activeLoopId}
+                {steps.find((s) => s.id === currentLoopId)?.name || currentLoopId}
               </strong>
             </span>
             <button onClick={stopLoopRecording} className="text-red-600 underline">

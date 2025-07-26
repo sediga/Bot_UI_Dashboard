@@ -112,6 +112,10 @@ export default function RecorderDashboard() {
   const RETRY_DELAY = 3000; // ms
   const socketRef = useRef({});
 
+  useEffect(() => {
+    console.log("📌 currentLoopId in RecorderDashboard:", currentLoopId);
+  }, [currentLoopId]);
+
   function ensureWebSocket(channel, isMounted) {
     return new Promise((resolve, reject) => {
       const existing = socketRef.current[channel];
@@ -164,6 +168,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
     ws.onmessage = (event) => {
       try {
         console.log(`📨 Message on ${channel}`);
+        console.log(`Current Loop Id in Dashboard : ${currentLoopId}`)
         const raw = JSON.parse(event.data);
         if (!isMounted) return;
 
@@ -342,6 +347,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
               updateStepWithImprovedSelector={updateStepWithImprovedSelector}
               setPickedTarget={setPickedTarget}
               currentLoopId={currentLoopId}
+              setCurrentLoopId={setCurrentLoopId}
               setSteps={setSteps}
               agentStatus={agentStatus}
               logs={logs}
@@ -366,6 +372,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
                 pickedTarget={pickedTarget}
                 setPickedTarget={setPickedTarget}
                 agentStatus={agentStatus}
+                currentLoopId={currentLoopId}
                 setCurrentLoopId={setCurrentLoopId}
                 logs={logs}
               />

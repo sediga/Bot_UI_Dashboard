@@ -9,6 +9,7 @@ export default function StepBuilder({
   isMounted,
   addStep,
   currentLoopId,
+  setCurrentLoopId,
   steps,
   clearSteps,
   updateStepWithImprovedSelector,
@@ -37,7 +38,13 @@ export default function StepBuilder({
   const { user } = useAuth();
   const userId = user?.userId;
   const messageQueueRef = useRef([]);
-  console.log("builder agentStatus:", agentStatus);
+  const currentLoopIdRef = useRef(currentLoopId);
+
+  useEffect(() => {
+    currentLoopIdRef.current = currentLoopId;
+  }, [currentLoopId]);
+
+  // console.log("builder agentStatus:", agentStatus);
   function hasPlaceholder(val) {
     return typeof val === "string" && /{{\s*[\w.]+\s*}}/.test(val);
   }
@@ -55,6 +62,10 @@ export default function StepBuilder({
 
     return `${action.charAt(0).toUpperCase() + action.slice(1)}: ${text.trim()}`;
   }
+
+  useEffect(() => {
+    console.log("📌 currentLoopId in StepBuilder:", currentLoopId);
+  }, [currentLoopId]);
 
   useEffect(() => {
     const fetchFlows = async () => {
@@ -85,7 +96,7 @@ export default function StepBuilder({
     fetchFlows();
   }, [token]);
 
-  console.log("🔄 render", rawMessages);
+  // console.log("🔄 render", rawMessages);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -137,8 +148,8 @@ export default function StepBuilder({
               computedStyles: payload.computedStyles || {}
             };
 
-            if (currentLoopId) {
-              step.parentId = currentLoopId;
+            if (currentLoopIdRef.current) {
+              step.parentId = currentLoopIdRef.current;
 
               if (isSmartColumnClick) {
                 step.columnIndex = payload.columnIndex;

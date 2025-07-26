@@ -28,9 +28,36 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
+    localStorage.setItem("logout_reason", reason);
     setUser(null);
   };
 
+  useEffect(() => {
+    const timeout = 20 * 60 * 1000; // 20 min
+    let timer;
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        console.log("💤 Logging out due to inactivity");
+        logout("inactivity")
+      }, timeout);
+    };
+
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("keydown", resetTimer);
+    window.addEventListener("click", resetTimer);
+
+    resetTimer(); // initial
+
+    return () => {
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
+      window.removeEventListener("click", resetTimer);
+      clearTimeout(timer);
+    };
+  }, []);
+  
   useEffect(() => {
     const token = localStorage.getItem("botflows_token");
     if (!token) {

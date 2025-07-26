@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import config from "../config";
 import { getUniqueSelector } from "../utils/selectorutils";
 import FilterBuilder from "./FilterBuilder";
+import SMART_STEP_CONFIG from "../config/smartStepsConfig";
+import ExportDataWizard from "./smartsteps/ExportDataWizard"
 
 export default function SmartStepWizard({
   pickedTarget,
   onSmartStepCreated,
   onCancel,
-  availableExtractSteps = [],
-  currentLoopId,
+  availableExtractSteps = []
 }) {
   const [step, setStep] = useState(1);
   const [stepType, setStepType] = useState("");
@@ -19,6 +20,8 @@ export default function SmartStepWizard({
   const [loopCount, setLoopCount] = useState(3);
   const [selectedSource, setSelectedSource] = useState("");
   const [stepName, setStepName] = useState("");
+  const [stepConfig, setStepConfig] = useState(null);
+  const [fieldValues, setFieldValues] = useState({});
 
   const reset = () => {
     setStep(1);
@@ -77,8 +80,7 @@ const handleFinish = () => {
       loopType: "counter",
       name: stepName,
       loopCount,
-      actionsPerRow: [],
-      parentId: currentLoopId
+      actionsPerRow: []
     };
   } else if (stepType === "loop-dataset") {
     const sourceStep = availableExtractSteps.find(s => s.id === selectedSource);
@@ -89,8 +91,7 @@ const handleFinish = () => {
       loopType: "dataset",
       name: stepName,
       source: selectedSource,
-      actionsPerRow: [],
-      parentId: currentLoopId
+      actionsPerRow: []
     };
 
     fetch(`${config.agentServerUrl}/api/start-loop-recording`, {
@@ -102,7 +103,23 @@ const handleFinish = () => {
         sourceStep: sourceStep // full gridExtract step
       })
     })
-}
+  } else if (stepType === "export-data") {
+      const sourceStep = availableExtractSteps.find(s => s.id === selectedSource);
+      if(!sourceStep) return;
+      payload = {
+        id: `dataexportStep_${Date.now()}`,
+        type: "exportData",
+        name: stepName,
+        source: selectedSource,
+        format,
+        filename,
+        appendTimestamp,
+        overwrite,
+        columns: selectedColumns,
+        actionsPerRow: []  // Optional, if needed for further logic
+      };
+  }
+
 
   fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
   onSmartStepCreated(payload);
@@ -153,38 +170,27 @@ const handleFinish = () => {
       <div className="text-sm font-semibold text-blue-700">Step 1: Choose Type</div>
 
       <div className="space-y-4">
-        <div>
-          <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">📥 Extract Data</h4>
-          <div className="grid grid-cols-2 gap-4">
-            {stepCard("From Data Grid", "Extract rows and columns", () => {
-              setStepType("extract-grid");
-              startGridPick();
-            })}
-            {stepCard("From API (coming soon)", "Pull data from backend", null, true)}
-          </div>
-        </div>
+        {SMART_STEP_CONFIG.map(({ category, emoji, steps }) => (
+          <div key={category}>
+            <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">
+              {emoji} {category}
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              {steps.map((s) =>
+                stepCard(s.title, s.description, async () => {
+                  setStepType(s.id);
+                  setStepConfig(s);
+                  setFieldValues({});
+                  setStep(2);
 
-        <div>
-          <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">🔁 Loop</h4>
-          <div className="grid grid-cols-2 gap-4">
-            {stepCard("Counter-Based Loop", "Repeat step N times", () => {
-              setStepType("loop-counter");
-              setStep(2);
-            })}
-            {stepCard("Data-Driven Loop", "Loop over extracted grid", () => {
-              setStepType("loop-dataset");
-              setStep(2);
-            })}
+                  if (s.agentMode === "target-pick") {
+                    await startGridPick();
+                  }
+                })
+              )}
+            </div>
           </div>
-        </div>
-
-        <div>
-          <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">🧠 Conditional (soon)</h4>
-          <div className="grid grid-cols-2 gap-4">
-            {stepCard("If / Else Block", "Add conditional logic", null, true)}
-            {stepCard("Wait for Element", "Pause until condition met", null, true)}
-          </div>
-        </div>
+        ))}
       </div>
 
       <button
@@ -359,6 +365,17 @@ const handleFinish = () => {
     </div>
   );
 
+  const renderExportData = () => (
+    <ExportDataWizard
+      availableExtractSteps={availableExtractSteps}
+      onCreate={(step) => {
+        onSmartStepCreated(step);
+        onCancel();
+      }}
+      onCancel={onCancel}
+    />
+  );
+
   return (
     <div className="space-y-4 text-sm relative z-10">
       {step === 1 && renderStep1()}
@@ -381,6 +398,7 @@ const handleFinish = () => {
       {step === 2 && stepType === "extract-grid" && gridMeta && renderExtractGrid()}
       {step === 2 && stepType === "loop-counter" && renderLoopCounter()}
       {step === 2 && stepType === "loop-dataset" && renderLoopDataset()}
+      {step === 2 && stepType === "export-data" && renderExportData()}
     </div>
   );
 }
