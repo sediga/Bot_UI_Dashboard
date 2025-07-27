@@ -31,12 +31,12 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("botflows_userId");
     localStorage.setItem("logout_reason", reason);
     setUser(null);
-    
+
     navigate("/login")
   };
 
   useEffect(() => {
-    const timeout = 1 * 60 * 1000; // 20 min
+    const timeout = 20 * 60 * 1000; // 20 min
     let timer;
 
     const resetTimer = () => {
