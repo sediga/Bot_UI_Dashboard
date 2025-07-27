@@ -47,6 +47,14 @@ const Login = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    const reason = localStorage.getItem("logout_reason");
+    if (reason === "inactivity") {
+      alert("You've been logged out due to inactivity. All unsaved changes were discarded.");
+      localStorage.removeItem("logout_reason"); // Clean it
+    }
+  }, []);
+  
   const handleLogin = async (e) => {
     e.preventDefault();
 

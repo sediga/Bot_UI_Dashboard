@@ -25,12 +25,6 @@ function App() {
 
   const navigate = useNavigate(); // ✅ This will now work, since App is under <Router>
 
-  const logout = () => {
-    localStorage.removeItem("botflows_token");
-    setUser(null);
-    navigate("/login");
-  };
-
   const login = (token) => {
     try {
       const payload = jwtDecode(token);

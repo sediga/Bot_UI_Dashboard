@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
     return token && userId ? { token, userId } : null;
   });
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const login = (token) => {
     const now = Date.now();
@@ -25,15 +26,17 @@ export function AuthProvider({ children }) {
     setUser({ token, userId });
   };
 
-  const logout = () => {
+  const logout = (reason) => {
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
     localStorage.setItem("logout_reason", reason);
     setUser(null);
+    
+    navigate("/login")
   };
 
   useEffect(() => {
-    const timeout = 20 * 60 * 1000; // 20 min
+    const timeout = 1 * 60 * 1000; // 20 min
     let timer;
 
     const resetTimer = () => {
