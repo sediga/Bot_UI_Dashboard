@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import config from "../config";
 import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
-
+import FlowSelector from "./FlowSelector";
 
 export default function StepBuilder({
   onEnsureWebSocket,
@@ -67,34 +67,34 @@ export default function StepBuilder({
     console.log("📌 currentLoopId in StepBuilder:", currentLoopId);
   }, [currentLoopId]);
 
-  useEffect(() => {
-    const fetchFlows = async () => {
-      try {
-        const headers = {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "x-api-key": config.apiKey
-        };
+  // useEffect(() => {
+  //   const fetchFlows = async () => {
+  //     try {
+  //       const headers = {
+  //         Authorization: `Bearer ${token}`,
+  //         "Content-Type": "application/json",
+  //         "x-api-key": config.apiKey
+  //       };
 
-        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, { headers });
-        if (!res.ok) {
-          console.warn("Fetch failed:", res.status);
-          return;
-        }
+  //       const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, { headers });
+  //       if (!res.ok) {
+  //         console.warn("Fetch failed:", res.status);
+  //         return;
+  //       }
 
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setAvailableFlows(data);
-        } else {
-          console.warn("Unexpected data format:", data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch flow list", err);
-      }
-    };
+  //       const data = await res.json();
+  //       if (Array.isArray(data)) {
+  //         setAvailableFlows(data);
+  //       } else {
+  //         console.warn("Unexpected data format:", data);
+  //       }
+  //     } catch (err) {
+  //       console.error("Failed to fetch flow list", err);
+  //     }
+  //   };
 
-    fetchFlows();
-  }, [token]);
+  //   fetchFlows();
+  // }, [token]);
 
   // console.log("🔄 render", rawMessages);
 
@@ -416,22 +416,14 @@ const loadFlow = async (selectedFlow) => {
 
         <div className="text-sm text-gray-500">Status: {status}</div>
 
-        <div className="border-t pt-4">
-          <label className="block mb-1 font-medium">Load Flow:</label>
-          <select
-            className="border rounded p-2 w-full"
-            value={selectedFlow}
-            onChange={(e) => {
-              setSelectedFlow(e.target.value);
-              loadFlow(e.target.value);
-            }}
-          >
-            <option value="">-- Choose saved flow --</option>
-            {availableFlows.map((flow) => (
-              <option key={flow.path} value={flow.path}>{flow.name}</option>
-            ))}
-          </select>
-        </div>
+        <FlowSelector
+          value={selectedFlow}
+          onChange={(val) => {
+            setSelectedFlow(val);
+            loadFlow(val);
+          }}
+          label="Select Flow"
+        />
       </div>
 
       {/* Save Popup */}

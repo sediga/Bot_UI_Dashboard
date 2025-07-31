@@ -6,6 +6,10 @@ import ReplayPanel from "./ReplayPanel";
 import config from "../config";
 import Header from "./Header";
 import { useAuth } from "../contexts/AuthContext";
+import DashboardTour from './DashboardTour'; // Adjust path as needed
+import CreatePanel from "./CreatePanel";
+import ConfigurePanel from "./ConfigurePanel";
+
 
 export default function RecorderDashboard() {
   const [steps, setSteps] = useState([]);
@@ -24,6 +28,11 @@ export default function RecorderDashboard() {
   const [replayMessages, setReplayMessages] = useState([]);
   const [recordMessages, setRecordMessages] = useState([]);
   const activeTabRef = useRef(activeTab);
+
+  const [runTour, setRunTour] = useState(() => {
+    return localStorage.getItem("botflows_tour_skipped") !== "true";
+  });
+
 
   const stopRecording = async () => {
     try {
@@ -112,10 +121,6 @@ export default function RecorderDashboard() {
   const RETRY_DELAY = 3000; // ms
   const socketRef = useRef({});
 
-  useEffect(() => {
-    console.log("📌 currentLoopId in RecorderDashboard:", currentLoopId);
-  }, [currentLoopId]);
-
   function ensureWebSocket(channel, isMounted) {
     return new Promise((resolve, reject) => {
       const existing = socketRef.current[channel];
@@ -191,7 +196,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
     } else if (activeTab === "replay") {
       setReplayMessages([]);
       setLogs([]);
-    }    
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -213,7 +218,11 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
   useEffect(() => {
     const checkAgentStatus = async () => {
       try {
-        const res = await fetch(`${config.agentServerUrl}/api/status`);
+        const res = await fetch(`${config.agentServerUrl}/api/status`, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
         const data = await res.json();
         if (data.replaying) {
           setAgentStatus("replaying");
@@ -268,7 +277,6 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
     document.removeEventListener("mousemove", handleResizing);
     document.removeEventListener("mouseup", stopResizing);
   };
-
   
   return (
     <div className="h-full flex flex-col bg-gray-50 text-gray-800">
@@ -293,96 +301,37 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
             ))}
           </nav>
         </div>
-
-        {/* Agent warning */}
-        {["stopped", "unknown"].includes(agentStatus) && (
-          <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mx-6 my-2 rounded">
-            <p className="font-semibold">Botflows Agent not running.</p>
-            <p className="text-sm mt-1">To enable recording and replay, please install and run the Botflows Agent.</p>
-            <button
-              className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-              onClick={() => {
-                const url =
-                  "https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/BotflowsAgentInstaller.exe";
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = "BotflowsAgentInstaller.exe";
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }}
-            >
-              Download Botflows Agent
-            </button>
-
-            <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded">
-              <strong>Important:</strong> This installer is currently not digitally signed.
-              <br />
-              You may see a SmartScreen warning from Windows. To proceed:
-              <ul className="list-disc list-inside mt-1 ml-2 text-sm">
-                <li>Click <em>"More info"</em></li>
-                <li>Then click <em>"Run anyway"</em></li>
-              </ul>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Main workspace (scrollable) */}
       <div className="flex-1 overflow-hidden min-h-0">
         {activeTab === "create" && (
-        <main className="flex h-full w-full overflow-hidden">
-          {/* Left Panel (StepBuilder) */}
-          <div
-            ref={leftPanelRef}
-            className="h-full min-w-[200px] max-w-[80%] overflow-auto"
-            style={{ width: leftWidth }}
-          >
-            <StepBuilder
-              onEnsureWebSocket={ensureWebSocket}
-              isMounted={true}
-              addStep={addStep}
-              clearSteps={clearSteps}
-              steps={steps}
-              updateStepWithImprovedSelector={updateStepWithImprovedSelector}
-              setPickedTarget={setPickedTarget}
-              currentLoopId={currentLoopId}
-              setCurrentLoopId={setCurrentLoopId}
-              setSteps={setSteps}
-              agentStatus={agentStatus}
-              logs={logs}
-              setLogs={setLogs}
-              rawMessages={recordMessages}
-              setRawMessages={setRecordMessages}
-            />
-          </div>
-
-          {/* Draggable Divider */}
-          <div
-            className="w-2 cursor-col-resize bg-gray-300"
-            onMouseDown={startResizing}
+          <CreatePanel
+            steps={steps}
+            setSteps={setSteps}
+            addStep={addStep}
+            clearSteps={clearSteps}
+            updateStepWithImprovedSelector={updateStepWithImprovedSelector}
+            pickedTarget={pickedTarget}
+            setPickedTarget={setPickedTarget}
+            agentStatus={agentStatus}
+            logs={logs}
+            setLogs={setLogs}
+            recordMessages={recordMessages}
+            setRecordMessages={setRecordMessages}
+            ensureWebSocket={ensureWebSocket}
+            currentLoopId={currentLoopId}
+            setCurrentLoopId={setCurrentLoopId}
+            leftWidth={leftWidth}
+            leftPanelRef={leftPanelRef}
+            startResizing={startResizing}
           />
-
-          {/* Right Panel (StepList) */}
-          <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <StepList
-                steps={steps}
-                setSteps={setSteps}
-                pickedTarget={pickedTarget}
-                setPickedTarget={setPickedTarget}
-                agentStatus={agentStatus}
-                currentLoopId={currentLoopId}
-                setCurrentLoopId={setCurrentLoopId}
-                logs={logs}
-              />
-            </div>
-          </div>
-        </main>
         )}
 
         {activeTab === "replay" && (
-          <main className="p-6 overflow-auto h-full">
+          <main className="relative flex p-6 overflow-auto h-full">
+            {/* Agent not running overlay */}
+
             <ReplayPanel 
               onEnsureWebSocket={ensureWebSocket}
               isMounted={true}
@@ -395,12 +344,8 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
           </main>
         )}
 
-        {activeTab === "config" && (
-          <main className="p-6 overflow-auto h-full text-gray-600">
-            <h2 className="text-lg font-semibold mb-2">Configuration</h2>
-            <p>Coming soon: Configure agent settings, integrations, and replay options.</p>
-          </main>
-        )}
+        {activeTab === "config" && <ConfigurePanel />}
+
         {showConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">
@@ -423,6 +368,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
             </div>
           </div>
         )}      
+        <DashboardTour run={runTour} setRun={setRunTour} />
       </div>
     </div>
       

@@ -19,8 +19,7 @@ const ProtectedLayout = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem("botflows_token");
     if (!token) {
-      setLoading(false);
-      navigate("/login");
+      logout("inactivity");
       return;
     }
 

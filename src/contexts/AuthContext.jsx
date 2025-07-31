@@ -30,9 +30,16 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
     localStorage.setItem("logout_reason", reason);
+    localStorage.removeItem("botflows_config");
     setUser(null);
-
-    navigate("/login")
+    if(reason === "inactivity")
+    {
+        console.log("💤 Logging out due to inactivity");
+        navigate("/login")
+    }
+    else{
+      navigate("/")
+    }
   };
 
   useEffect(() => {
@@ -42,7 +49,6 @@ export function AuthProvider({ children }) {
     const resetTimer = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        console.log("💤 Logging out due to inactivity");
         logout("inactivity")
       }, timeout);
     };
