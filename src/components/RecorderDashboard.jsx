@@ -9,6 +9,7 @@ import { useAuth } from "../contexts/AuthContext";
 import DashboardTour from './DashboardTour'; // Adjust path as needed
 import CreatePanel from "./CreatePanel";
 import ConfigurePanel from "./ConfigurePanel";
+import SectionWithBackground from "./SectionWithBackground";
 
 
 export default function RecorderDashboard() {

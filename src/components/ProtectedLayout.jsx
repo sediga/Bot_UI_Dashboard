@@ -12,7 +12,6 @@ const ProtectedLayout = ({ children }) => {
   const handleLogout = () => {
       if (window.confirm("Are you sure you want to log out?")) {
         logout();
-        navigate("/");
       }
   };
   
@@ -53,11 +52,12 @@ const ProtectedLayout = ({ children }) => {
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-gray-800 text-white p-4 flex justify-between items-center shadow">
         <div className="flex items-center space-x-4">
-          <Link to="/" className="flex items-center space-x-0">
+          <Link to="/" className="flex items-center space-x-2">
             <img src="/assets/logo.png" alt="Botflows Logo" className="h-8" />
             <span className="text-white text-xl font-semibold">
-              otflows Dashboard
+              Flowtra Dashboard
             </span>
+                <span className="bg-indigo-500 text-white text-xs font-semibold px-2 py-1 rounded">BETA</span>
           </Link>
         </div>
         {/* Right side */}
@@ -73,9 +73,13 @@ const ProtectedLayout = ({ children }) => {
       </header>
 
       {/* Main Content Area fills remaining height */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {children}
-      </div>
+    {/* <div className="bg-white flex-1 w-full">
+      <SectionWithBackground> */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {children}
+        </div>
+      {/* </SectionWithBackground>
+      </div> */}
     </div>
   );
 

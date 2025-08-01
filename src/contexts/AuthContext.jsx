@@ -19,7 +19,7 @@ export function AuthProvider({ children }) {
     const timeoutMinutes = 20; // set your timeout duration
     const expiry = now + timeoutMinutes * 60 * 1000;
     localStorage.setItem("botflows_token", token);
-    localStorage.setItem("botflows_token_expiry", expiry.toString());
+    // localStorage.setItem("botflows_token_expiry", expiry.toString());
     const payload = JSON.parse(atob(token.split('.')[1]));
     const userId = payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || "0";
     localStorage.setItem("botflows_userId", userId);
@@ -27,6 +27,8 @@ export function AuthProvider({ children }) {
   };
 
   const logout = (reason) => {
+    let timer;
+    clearTimeout(timer);  
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
     localStorage.setItem("logout_reason", reason);
@@ -56,7 +58,11 @@ export function AuthProvider({ children }) {
     window.addEventListener("mousemove", resetTimer);
     window.addEventListener("keydown", resetTimer);
     window.addEventListener("click", resetTimer);
-
+    window.addEventListener("scroll", resetTimer);
+    window.addEventListener("touchstart", resetTimer);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") resetTimer();
+    });
     resetTimer(); // initial
 
     return () => {
