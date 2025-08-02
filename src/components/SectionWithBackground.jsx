@@ -1,7 +1,7 @@
 // components/SectionWithBackground.jsx
 const SectionWithBackground = ({ children, gradientId = "grad1", svgPath, className = "" }) => {
   return (
-    <section className={`relative overflow-hidden min-h-[400px] py-6 ${className}`}>
+    <section className={`relative overflow-hidden py-6 ${className}`}>
       {/* Background SVG */}
       <svg
         className="absolute inset-0 w-full h-full opacity-10 pointer-events-none"

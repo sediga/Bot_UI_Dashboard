@@ -1,5 +1,8 @@
+import { useState } from "react";
 // components/BetaLaunchSections.jsx
 export default function BetaLaunchSections() {
+  const [showModal, setShowModal] = useState(false);
+  const [videoSrc, setVideoSrc] = useState("");
   const sections = [
     {
       title: "Smarter Browser Automation, Built for Real Life",
@@ -16,6 +19,8 @@ export default function BetaLaunchSections() {
       ),
       image: "/assets/slides/recording_3.png", 
       imageAlt: "Screenshot of recording flow",
+      video: "/assets/slides/onboard/basic_flow/grid_export.mp4",
+      videoCaption: "See how"
     },
     {
       title: "Affordable Automation for Startups and Small Teams",
@@ -31,6 +36,7 @@ export default function BetaLaunchSections() {
         </>      ),
       image: "/assets/slides/action.png", 
       imageAlt: "Illustration of various user types",
+      video: "/assets/slides/onboard/basic_flow/Recording_demo_2.mp4",
     //   className: "w-full h-full object-cover bg-gradient-to-b from-indigo-50 to-white"
     },
     {
@@ -62,6 +68,7 @@ export default function BetaLaunchSections() {
       ),
       image: "/assets/slides/architecture.png",
       imageAlt: "Architecture diagram of Flowtra setup",
+      video: "/assets/slides/onboard/basic_flow/agent_install.mp4",
     },
     {
       title: "Secure and Private by Design",
@@ -77,6 +84,7 @@ export default function BetaLaunchSections() {
       ),
       image: "/assets/slides/secure.png", 
       imageAlt: "Security shield and privacy icons",
+      video: "/assets/slides/onboard/basic_flow/config_secure.mp4",
     },
     // {
     //   title: "Ready to Automate Smarter?",
@@ -111,12 +119,26 @@ export default function BetaLaunchSections() {
           } items-center px-6 md:px-16 py-12 gap-10`}
         >
           {/* Image Placeholder */}
-        <div className="md:w-1/2 w-full h-64 flex items-center justify-center rounded-lg overflow-hidden ">
+        <div className={`relative md:w-1/2 w-full h-64 flex items-center justify-center rounded-lg overflow-hidden ${
+                section.video ? "group cursor-pointer" : ""
+            }`}
+            onClick={() => {
+                if (section.video) {
+                    setVideoSrc(section.video);
+                    setShowModal(true);
+                }
+            }}
+        >
         <img
             src={section.image}
             alt={section.imageAlt}
             className={section.className?? "w-full h-full object-contain"}
         />
+      {section.video && (    
+        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+            <span className="text-white text-lg font-medium">▶ {section.videoCaption?? "Watch how"}</span>
+        </div>
+      )}
         </div>
 
           {/* Text Content */}
@@ -126,6 +148,35 @@ export default function BetaLaunchSections() {
           </div>
         </section>
       ))}
+{showModal && (
+  <div
+    className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center"
+    onClick={() => setShowModal(false)}
+  >
+    <div
+      className="bg-white rounded-lg overflow-hidden w-[90%] max-w-6xl relative shadow-lg"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        onClick={() => setShowModal(false)}
+        className="absolute top-2 right-2 text-gray-700 hover:text-black text-2xl font-bold px-3 z-10"
+      >
+        &times;
+      </button>
+      <video
+        controls
+        autoPlay
+        className="w-full h-auto max-h-[90vh]"
+        onEnded={() => setShowModal(false)}
+      >
+        <source src={videoSrc} type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+    </div>
+  </div>
+)}
+
+
     </div>
   );
 }
