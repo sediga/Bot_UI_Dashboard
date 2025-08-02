@@ -8,6 +8,7 @@ import RecorderDashboard from "./components/RecorderDashboard";
 import LandingPage from "./components/LandingPage";
 import ProtectedLayout from "./components/ProtectedLayout";
 import config from "./config";
+import FeedbackBubble from "./components/FeedbackBubble";
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -72,6 +73,7 @@ function App() {
   }, [navigate]);
 
   return (
+    <>
     <GoogleOAuthProvider clientId={config.googleClientId}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -87,6 +89,10 @@ function App() {
         />
       </Routes>
     </GoogleOAuthProvider>
+
+      {/* ...your site layout */}
+      <FeedbackBubble />
+    </>
   );
 }
 

@@ -20,7 +20,6 @@ export default function BetaLaunchSections() {
       image: "/assets/slides/recording_3.png", 
       imageAlt: "Screenshot of recording flow",
       video: "/assets/slides/onboard/basic_flow/grid_export.mp4",
-      videoCaption: "See how"
     },
     {
       title: "Affordable Automation for Startups and Small Teams",
@@ -54,7 +53,8 @@ export default function BetaLaunchSections() {
       ),
       image: "/assets/slides/feedback_1.png", 
       imageAlt: "Collaborative roadmap image",
-      background:"bg-gradient-to-b from-indigo-50 to-white"
+      background:"bg-gradient-to-b from-indigo-50 to-white",
+      video: "/assets/slides/onboard/basic_flow/feedback_1.mp4",
     },
     {
       title: "Simple Setup. Powerful Results.",
