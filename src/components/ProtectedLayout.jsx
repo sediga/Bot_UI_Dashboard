@@ -15,7 +15,32 @@ const ProtectedLayout = ({ children }) => {
       }
   };
   
-  useEffect(() => {
+useEffect(() => {
+  let timeoutId;
+
+  const resetTimer = () => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      logout("inactivity");
+    }, 20 * 60 * 1000); // 20 minutes
+  };
+
+  const activityEvents = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+  activityEvents.forEach(event =>
+    window.addEventListener(event, resetTimer)
+  );
+
+  resetTimer(); // initialize timer on load
+
+  return () => {
+    clearTimeout(timeoutId);
+    activityEvents.forEach(event =>
+      window.removeEventListener(event, resetTimer)
+    );
+  };
+}, [logout]);
+
+useEffect(() => {
     const token = localStorage.getItem("botflows_token");
     if (!token) {
       logout("inactivity");
