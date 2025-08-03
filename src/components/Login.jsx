@@ -6,6 +6,7 @@ import { GoogleLogin } from "@react-oauth/google";
 import { jwtDecode } from "jwt-decode";
 import SectionWithBackground from "./SectionWithBackground";
 import TopBanner from "./TopBanner";
+import Footer from "../components/Footer";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -87,8 +88,9 @@ const Login = () => {
   return (
     <div className="bg-white min-h-screen w-full">
       <SectionWithBackground>
-        <TopBanner/>
-          <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="h-screen flex flex-col">
+          <TopBanner />
+          <div className="flex-1 flex items-center justify-center px-4">
             <form
               onSubmit={handleLogin}
               className="p-6 rounded-lg   w-full max-w-md"
@@ -115,7 +117,7 @@ const Login = () => {
                 type="submit"
                 className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
               >
-                Sign In
+                Log In
               </button>
               <p className="text-sm mt-4">
                 Don't have an account?{" "}
@@ -131,6 +133,8 @@ const Login = () => {
               </div>
             </form>
           </div>
+        <Footer  className="text-gray-500 text-sm py-6 pb-10 border-t-4 mt-10"/>
+        </div>
       </SectionWithBackground>
     </div>
   );

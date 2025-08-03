@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import config from "../config";
 import SectionWithBackground from "./SectionWithBackground";
 import TopBanner from "./TopBanner";
+import Footer from "../components/Footer";
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -41,10 +42,11 @@ const Signup = () => {
   };
 
   return (
-    <div className="min-h-screen w-full">
+    <div className="bg-white min-h-screen w-full">
       <SectionWithBackground>
-        <TopBanner/>
-          <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="h-screen flex flex-col">
+          <TopBanner />
+          <div className="flex-1 flex items-center justify-center px-4">
             <form
               onSubmit={handleSignup}
               className="p-6 rounded-lg w-full max-w-md"
@@ -81,6 +83,11 @@ const Signup = () => {
               >
                 Sign Up
               </button>
+              <p className="text-xs text-gray-500 mt-4">
+                By signing up, you agree to our{" "}
+                <Link to="/terms" className="underline text-blue-600">Terms of Use</Link> and{" "}
+                <Link to="/privacy" className="underline text-blue-600">Privacy Policy</Link>.
+              </p>
               <p className="text-sm mt-4">
                 Already have an account?{" "}
                 <a className="text-blue-600" href="/login">
@@ -89,6 +96,8 @@ const Signup = () => {
               </p>
             </form>
           </div>
+        <Footer  className="text-gray-500 text-sm py-6 pb-10 border-t-4 mt-10"/>
+        </div>
       </SectionWithBackground>
     </div>
   );

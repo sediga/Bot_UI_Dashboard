@@ -3,6 +3,7 @@ import FeatureCarousel from "./demo/FeatureCarousel";
 import BetaLaunchSections from "./BetaLaunchSections";
 import SectionWithBackground from "./SectionWithBackground";
 import TopBanner from "./TopBanner";
+import Footer from "./Footer"; 
 
 const Landing = () => {
   return (
@@ -32,6 +33,7 @@ const Landing = () => {
         </p>
       </section>
       </SectionWithBackground>
+      <Footer />
     </div>
   );
 };

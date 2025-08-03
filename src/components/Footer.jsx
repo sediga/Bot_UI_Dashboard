@@ -1,0 +1,16 @@
+import { Link } from "react-router-dom";
+
+const Footer = () => (
+  <footer className="text-gray-500 text-sm py-6 border-t-4 mt-10">
+    <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between space-y-3 md:space-y-0">
+      <div>© {new Date().getFullYear()} Flowtra. All rights reserved.</div>
+      <div className="flex space-x-4">
+        <Link to="/privacy" className="hover:underline">Privacy Policy</Link>
+        <Link to="/terms" className="hover:underline">Terms of Use</Link>
+        <a href="mailto:support@flowtra.app" className="hover:underline">Contact</a>
+      </div>
+    </div>
+  </footer>
+);
+
+export default Footer;

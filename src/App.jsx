@@ -9,33 +9,14 @@ import LandingPage from "./components/LandingPage";
 import ProtectedLayout from "./components/ProtectedLayout";
 import config from "./config";
 import FeedbackBubble from "./components/FeedbackBubble";
+import { useAuth } from "./contexts/AuthContext";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfUse from "./pages/TermsOfUse";
 
 function App() {
-  const [user, setUser] = useState(() => {
-    const token = localStorage.getItem("botflows_token");
-    if (!token) return null;
-
-    try {
-      const payload = jwtDecode(token);
-      const userId = payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"];
-      return { token, userId };
-    } catch {
-      return null;
-    }
-  });
+  const { user, login, logout } = useAuth();
 
   const navigate = useNavigate(); // ✅ This will now work, since App is under <Router>
-
-  const login = (token) => {
-    try {
-      const payload = jwtDecode(token);
-      const userId = payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"];
-      localStorage.setItem("botflows_token", token);
-      setUser({ token, userId });
-    } catch {
-      console.warn("Invalid token format");
-    }
-  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -54,14 +35,16 @@ function App() {
           })
             .then((res) => res.json())
             .then((data) => {
-              if (data.token) login(data.token);
-              else throw new Error("No token in refresh response");
+              if (data.token) {
+                login(data.token);
+                localStorage.setItem("last_user_activity_time", Date.now().toString()); // ✅ refresh session activity
+              }
             })
             .catch((err) => {
               console.error("Token refresh failed:", err);
               localStorage.removeItem("botflows_token");
-              setUser(null);
-              navigate("/login");
+              logout("inactivity")
+             navigate("/login");
             });
         }
       } catch (e) {
@@ -87,6 +70,8 @@ function App() {
             </ProtectedLayout>
           }
         />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfUse />} />
       </Routes>
     </GoogleOAuthProvider>
 
