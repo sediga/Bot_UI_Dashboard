@@ -22,6 +22,20 @@ export default function BetaLaunchSections() {
       video: "/assets/slides/onboard/basic_flow/grid_export.mp4",
     },
     {
+      title: "Simple Setup. Powerful Results.",
+      content: (
+        <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
+          <li>Install Flowtra Agent on your desktop</li>
+          <li>Login to Flowtra Dashboard and start recording</li>
+          <li>Save, schedule, and replay flows</li>
+          <li>Run in the cloud or locally — your choice</li>
+        </ol>
+      ),
+      image: "/assets/slides/architecture.png",
+      imageAlt: "Architecture diagram of Flowtra setup",
+      video: "/assets/slides/onboard/basic_flow/agent_install.mp4",
+    },
+    {
       title: "Affordable Automation for Startups and Small Teams",
       content: (
         <>
@@ -55,20 +69,6 @@ export default function BetaLaunchSections() {
       imageAlt: "Collaborative roadmap image",
       background:"bg-gradient-to-b from-indigo-50 to-white",
       video: "/assets/slides/onboard/basic_flow/feedback_1.mp4",
-    },
-    {
-      title: "Simple Setup. Powerful Results.",
-      content: (
-        <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-          <li>Install Flowtra Agent on your desktop</li>
-          <li>Login to Flowtra Dashboard and start recording</li>
-          <li>Save, schedule, and replay flows</li>
-          <li>Run in the cloud or locally — your choice</li>
-        </ol>
-      ),
-      image: "/assets/slides/architecture.png",
-      imageAlt: "Architecture diagram of Flowtra setup",
-      video: "/assets/slides/onboard/basic_flow/agent_install.mp4",
     },
     {
       title: "Secure and Private by Design",
