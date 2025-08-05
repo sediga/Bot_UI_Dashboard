@@ -23,15 +23,6 @@ const Landing = () => {
       {/* Beta Launch Sections */}
       <BetaLaunchSections />
 
-      {/* Final CTA */}
-      <section className="text-center py-12">
-        <p className="text-xl text-gray-500 mb-2">
-          Don’t have an account?{" "}
-          <Link to="/signup" className="text-indigo-600 underline hover:text-indigo-800">
-            Create one now
-          </Link>.
-        </p>
-      </section>
       </SectionWithBackground>
       <Footer />
     </div>
