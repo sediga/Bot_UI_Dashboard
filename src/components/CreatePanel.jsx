@@ -28,9 +28,9 @@ export default function CreatePanel({
       {["stopped", "unknown"].includes(agentStatus) && (
         <div className="absolute inset-0 bg-white bg-opacity-95 z-40 flex items-center justify-center px-6">
           <div className="bg-yellow-100 border border-yellow-400 text-yellow-900 p-6 rounded-lg shadow max-w-xl w-full">
-            <p className="font-semibold text-lg text-yellow-800 mb-2">Botflows Agent not running.</p>
+            <p className="font-semibold text-lg text-yellow-800 mb-2">Flowtra Agent not running.</p>
             <p className="text-sm mb-4">
-              To enable recording and replay, please install and run the Botflows Agent.
+              To enable recording and replay, please install and run the Flowtra Agent.
             </p>
 
             <button
@@ -45,7 +45,7 @@ export default function CreatePanel({
                 document.body.removeChild(link);
               }}
             >
-              Download Botflows Agent
+              Download Flowtra Agent
             </button>
 
             <div className="p-3 bg-red-100 border border-red-400 text-red-800 rounded text-sm">

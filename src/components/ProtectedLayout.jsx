@@ -78,7 +78,7 @@ useEffect(() => {
       <header className="sticky top-0 z-50 bg-gray-800 text-white p-4 flex justify-between items-center shadow">
         <div className="flex items-center space-x-4">
           <Link to="/" className="flex items-center space-x-2">
-            <img src="/assets/logo.png" alt="Botflows Logo" className="h-8" />
+            <img src="/assets/logo.png" alt="Flowtra Logo" className="h-8" />
             <span className="text-white text-xl font-semibold">
               Flowtra Dashboard
             </span>

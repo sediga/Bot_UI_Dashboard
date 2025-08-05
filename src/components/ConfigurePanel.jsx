@@ -585,7 +585,7 @@ const SectionCard = ({ title, sectionKey, children }) => {
             }
             if(schedules.find(item => item.flow?.value == newSchedule.flow.value))
             {
-                alert("Schedule already defined for this flow! delte existing schdule to configure new one.");
+                alert("Schedule already defined for this flow! delete existing schdule to configure new one.");
                 return;
             }
             setSchedules([...schedules, newSchedule]);
