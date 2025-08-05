@@ -124,7 +124,7 @@ export default function BetaLaunchSections() {
               Get Started
             </a>
             <p className="text-sm mt-2 text-gray-600">
-              Need help? <a onClick={() => setShowPopup(true)} className="underline">Contact support</a>
+              Need help? <a onClick={() => setShowPopup(true)} className="underline cursor-pointer">Contact support</a>
             </p>
           </div>
         </>
