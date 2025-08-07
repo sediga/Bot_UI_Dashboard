@@ -18,7 +18,10 @@ export default function ReplayPanel({
   const [log, setLog] = useState("");
   const token = localStorage.getItem("botflows_token");
   const { userId } = useAuth();
- 
+   // OS Detection (macOS)
+  const isMacOS = () => /Mac/i.test(navigator.platform || navigator.userAgent);
+  const showMacWarning = isMacOS();
+
   useEffect(() => {
     if (!rawMessages || rawMessages.length === 0) return;
 
@@ -96,40 +99,52 @@ export default function ReplayPanel({
 
   return (
     <div className="relative w-full h-full px-6 max-w-screen-lg mx-auto flex flex-col space-y-6">
-      {/* Overlay */}
-      {["stopped", "unknown"].includes(agentStatus) && (
-        <div className="absolute inset-0 bg-white bg-opacity-95 z-40 flex items-center justify-center px-6">
-          <div className="bg-yellow-100 border border-yellow-400 text-yellow-900 p-6 rounded-lg shadow max-w-xl w-full">
-            <p className="font-semibold text-lg text-yellow-800 mb-2">Flowtra Agent not running.</p>
-            <p className="text-sm mb-4">
-              To enable recording and replay, please install and run the Flowtra Agent.
+      {/* macOS Warning Overlay */}
+      {showMacWarning && (
+        <div className="absolute inset-0 bg-white bg-opacity-95 z-50 flex items-center justify-center px-6">
+          <div className="bg-red-100 border border-red-400 text-red-800 p-6 rounded-lg shadow max-w-xl w-full">
+            <p className="font-semibold text-lg">macOS Not Supported (Yet)</p>
+            <p className="text-sm mt-2">
+              The Flowtra Agent currently works only on Windows.
+              We're actively working on macOS compatibility. Please try again on a Windows machine to record and replay flows.
             </p>
-
-            <button
-              className="installAgent mb-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-              onClick={() => {
-                const url = "https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/BotflowsAgentInstaller.exe";
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = "BotflowsAgentInstaller.exe";
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }}
-            >
-              Download Flowtra Agent
-            </button>
-
-            <div className="p-3 bg-red-100 border border-red-400 text-red-800 rounded text-sm">
-              <strong>Important:</strong> This installer is currently not digitally signed.<br />
-              You may see a SmartScreen warning from Windows. To proceed:
-              <ul className="list-disc list-inside mt-1 ml-4">
-                <li>Click <em>"More info"</em></li>
-                <li>Then click <em>"Run anyway"</em></li>
-              </ul>
-            </div>
           </div>
         </div>
+      )}
+      {/* Overlay */}
+      {!showMacWarning && ["stopped", "unknown"].includes(agentStatus) && (
+  <div className="absolute inset-0 bg-white bg-opacity-95 z-40 flex items-center justify-center px-6">
+    <div className="bg-blue-50 border border-blue-200 text-blue-900 p-6 rounded-lg shadow max-w-xl w-full">
+      <p className="font-semibold text-lg text-blue-800 mb-2">Flowtra Agent Required</p>
+      <p className="text-sm mb-4">
+        To start recording and replaying flows, please install and run the Flowtra Agent on your computer.
+      </p>
+
+      <button
+        className="installAgent mb-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+        onClick={() => {
+          const url = "https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/FlowtraAgentInstaller.exe";
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "FlowtraAgentInstaller.exe";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }}
+      >
+        Download Flowtra Agent
+      </button>
+
+      <div className="p-3 bg-gray-50 border border-gray-300 text-sm text-gray-800 rounded">
+        <strong>Note:</strong> This installer is not digitally signed yet.<br />
+        If you see a SmartScreen warning in Windows:
+        <ul className="list-disc list-inside mt-1 ml-4">
+          <li>Click <em>"More info"</em></li>
+          <li>Then click <em>"Run anyway"</em></li>
+        </ul>
+      </div>
+    </div>
+  </div>
       )}
 
       {/* Heading */}

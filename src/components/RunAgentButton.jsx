@@ -18,10 +18,10 @@ export default function RunAgentButton() {
   };
 
   const handleDownload = () => {
-    const url = "https://github.com/sediga/Bot_UI_Dashboard/releases/download/latest/BotflowsAgentInstaller.exe";
+    const url = "https://github.com/sediga/Bot_UI_Dashboard/releases/download/latest/FlowtraAgentInstaller.exe";
     const link = document.createElement("a");
     link.href = url;
-    link.download = "BotflowsAgentInstaller.exe";
+    link.download = "FlowtraAgentInstaller.exe";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
