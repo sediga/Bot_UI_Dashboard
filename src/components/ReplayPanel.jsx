@@ -75,8 +75,8 @@ export default function ReplayPanel({
     try {
         const headers = {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-          // "x-api-key": `${config.apiKey}` // Load from env later
+          "Content-Type": "application/json",
+          "x-api-key": `${config.apiKey}` // Load from env later
         };
         const apiRes = await fetch(`${config.apiBaseUrl}/api/flows/load?path=${encodeURIComponent(selectedFlow)}`, {
           headers: headers,
