@@ -201,7 +201,7 @@ function guessSecretName(p) {
               fetch(`${config.agentServerUrl}/api/overlay/show`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: "Sensitive input detected. Map it to a Secret?" })
+                body: JSON.stringify({ message: "Sensitive input detected. Map it to a Secret in dashboard" })
               });
 
               setSecretCtx({

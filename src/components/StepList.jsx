@@ -4,6 +4,7 @@ import SmartStepWizard from "./SmartStepWizard";
 import Modal from "./SmartStepModal";
 import config from "../config";
 import ParameterMappingModal from "./ParameterMappingModal";
+import SecretMapperModal from "./SecretMapperModal";
 
 export default function StepList({
   steps,
@@ -21,6 +22,26 @@ export default function StepList({
   const [showParamModal, setShowParamModal] = useState(false);
   const [pendingStep, setPendingStep] = useState(null);
   const [loopColumns, setLoopColumns] = useState([]);
+
+  const [showSecretModal, setShowSecretModal] = useState(false);
+  const [secretCtx, setSecretCtx] = useState(null);
+
+  const guessSecretName = (s) => {
+    const a = s?.attributes || {};
+    const pick =
+      s?.label ||
+      a.placeholder ||
+      a.name ||
+      a.id ||
+      s?.innerText ||
+      s?.elementText ||
+      "secret";
+    return String(pick)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40) || "secret";
+  };  
 
   useEffect(() => {
     const initialExpanded = {};
@@ -166,9 +187,22 @@ export default function StepList({
                   )}
                 </span>
                 {step.value && (
-                  <span className="text-green-600 ml-1">= "{step.value}"</span>
+                  <button
+                    className="text-green-700 ml-1 underline decoration-dotted hover:text-green-800"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSecretCtx({
+                        eventId: step.eventId || step.id, // fallback if eventId missing
+                        stepId: step.id,
+                        suggestedName: guessSecretName(step),
+                      });
+                      setShowSecretModal(true);
+                    }}
+                    title="Click to map to an agent secret"
+                  >
+                    = "{step.value}"
+                  </button>
                 )}
-
                 {step.validationStatus === "failed" && (
                   <div className="inline-flex items-center ml-2 text-yellow-600 group relative">
                     <svg
@@ -399,7 +433,37 @@ export default function StepList({
             defaultValue={pendingStep?.value || ""}
           />
         )}
-      </div>
+
+        {showSecretModal && secretCtx && (
+          <SecretMapperModal
+            open={showSecretModal}
+            eventId={secretCtx.eventId}
+            suggestedName={secretCtx.suggestedName}
+            onClose={() => {
+              setShowSecretModal(false);
+              setSecretCtx(null);
+            }}
+            onMapped={(mappedScope, name) => {
+              // mappedScope should be "agent"
+              setSteps((prev) =>
+                prev.map((s) =>
+                  s.id === secretCtx.stepId
+                    ? {
+                        ...s,
+                        value: `{{secret:${mappedScope}/${name}}}`,
+                        dynamicValue: `{{secret:${mappedScope}/${name}}}`,
+                        secretRef: `${mappedScope}/${name}`,
+                        isSensitive: true,
+                        label: `${(s.action || "Action").replace(/^./, c => c.toUpperCase())}: {{secret:${mappedScope}/${name}}}`,
+                      }
+                    : s
+                )
+              );
+              setShowSecretModal(false);
+              setSecretCtx(null);
+            }}
+          />
+        )}      </div>
     </section>
   );
 }
