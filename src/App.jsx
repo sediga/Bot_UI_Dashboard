@@ -32,8 +32,9 @@ function App() {
           fetch(`${config.apiBaseUrl}/api/auth/refresh`, {
             method: "POST",
             credentials: "include",
+            headers: { "x-api-key": config.apiKey },
           })
-            .then((res) => res.json())
+            .then((res) => (res.ok ? res.json() : Promise.reject(new Error("refresh failed"))))
             .then((data) => {
               if (data.token) {
                 login(data.token);

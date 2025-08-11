@@ -3,6 +3,7 @@ import config from "../config";
 import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
+import SecretMapperModal from "./SecretMapperModal";
 
 export default function StepBuilder({
   onEnsureWebSocket,
@@ -33,12 +34,18 @@ export default function StepBuilder({
   const [showParamModal, setShowParamModal] = useState(false);
   const [pendingStep, setPendingStep] = useState(null);
   const [loopColumns, setLoopColumns] = useState([]);
+  const [secretCtx, setSecretCtx] = useState(null);      
+  const [showSecretModal, setShowSecretModal] = useState(false);
+
   const token = localStorage.getItem("botflows_token");
   // const [logs, setLogs] = useState([]);
   const { user } = useAuth();
   const userId = user?.userId;
   const messageQueueRef = useRef([]);
   const currentLoopIdRef = useRef(currentLoopId);
+  
+  
+  const seenSecretIdsRef = useRef(new Set());
 
   useEffect(() => {
     currentLoopIdRef.current = currentLoopId;
@@ -97,7 +104,12 @@ export default function StepBuilder({
   // }, [token]);
 
   // console.log("🔄 render", rawMessages);
-
+function guessSecretName(p) {
+  const a = p.attributes || {};
+  const c = [a.name, a.id, a["aria-label"], a.placeholder, p.innerText, p.elementText].filter(Boolean);
+  const raw = (c[0] || "secret").toLowerCase();
+  return raw.replace(/[^a-z0-9]+/gi,"_").replace(/^_+|_+$/g,"").slice(0,40) || "secret";
+}
   useEffect(() => {
     const interval = setInterval(() => {
       if (messageQueueRef.current.length === 0) return;
@@ -126,6 +138,7 @@ export default function StepBuilder({
 
             const step = {
               id: crypto.randomUUID(),
+              eventId: payload.eventId,   // 👈 add this
               type: "uiAction",
               action: payload.action,
               value: payload.value || null,
@@ -173,6 +186,29 @@ export default function StepBuilder({
             if (payload.metadata?.validation?.status === "failed") {
               step.validationStatus = "failed";
               step.validationReason = payload.metadata.validation.reason;
+            }
+
+            const isSecretEvt =
+              payload.isSensitive &&
+              typeof payload.value === "string" &&
+              /^\{\{secret:/.test(payload.value) &&
+              payload.sensitiveToken &&
+              payload.eventId;
+
+            if (isSecretEvt && !seenSecretIdsRef.current.has(payload.eventId)) {
+              seenSecretIdsRef.current.add(payload.eventId);
+
+              fetch(`${config.agentServerUrl}/api/overlay/show`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: "Sensitive input detected. Map it to a Secret?" })
+              });
+
+              setSecretCtx({
+                eventId: payload.eventId,
+                suggestedName: guessSecretName(payload),
+              });
+              setShowSecretModal(true);
             }
 
             newSteps.push(step);
@@ -450,6 +486,31 @@ const loadFlow = async (selectedFlow) => {
       <div className="flex-1 min-h-0 mt-4 overflow-y-auto">
         <StatusPanel status={agentStatus} logs={logs} />
       </div>
+
+{showSecretModal && secretCtx && (
+  <SecretMapperModal
+    open={showSecretModal}
+    eventId={secretCtx.eventId}
+    suggestedName={secretCtx.suggestedName}
+    onClose={() => { setShowSecretModal(false); setSecretCtx(null); }}
+    onMapped={(mappedScope, name) => {
+      // mappedScope will always be "agent"
+      setSteps(prev =>
+        prev.map(s =>
+          s.eventId === secretCtx.eventId
+            ? {
+                ...s,
+                value: `{{secret:${mappedScope}/${name}}}`,
+                secretRef: `${mappedScope}/${name}`,
+                isSensitive: true,
+              }
+            : s
+        )
+      );
+    }}
+  />
+)}
+
     </section>
   );
 }

@@ -15,58 +15,34 @@ const ProtectedLayout = ({ children }) => {
       }
   };
   
-useEffect(() => {
-  let timeoutId;
-
-  const resetTimer = () => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      logout("inactivity");
-    }, 20 * 60 * 1000); // 20 minutes
-  };
-
-  const activityEvents = ["mousemove", "keydown", "click", "scroll", "touchstart"];
-  activityEvents.forEach(event =>
-    window.addEventListener(event, resetTimer)
-  );
-
-  resetTimer(); // initialize timer on load
-
-  return () => {
-    clearTimeout(timeoutId);
-    activityEvents.forEach(event =>
-      window.removeEventListener(event, resetTimer)
-    );
-  };
-}, [logout]);
 
 useEffect(() => {
-    const token = localStorage.getItem("botflows_token");
-    if (!token) {
-      logout("inactivity");
-      return;
-    }
+  const token = localStorage.getItem("botflows_token");
+  if (!token) {
+    // no token -> just go to login; don't call logout() here
+    navigate("/login");
+    return;
+  }
 
-    // Optional: Verify token by calling /api/me
-    fetch(`${config.apiBaseUrl}/api/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "x-api-key": config.apiKey,
-      },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then((data) => {
-        setEmail(data.username || "");  // ✅ assuming response contains { email: "..." }
-        setLoading(false)
-      })
-      .catch(() => {
-        localStorage.removeItem("botflows_token");
-        navigate("/login");
-      });
-  }, [navigate]);
+  // render the page; don't block on /api/me
+  setLoading(false);
+
+  // fire-and-forget: fetch profile to show email
+  fetch(`${config.apiBaseUrl}/api/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "x-api-key": config.apiKey,
+    },
+    credentials: "include",
+  })
+    .then((res) => (res.ok ? res.json() : Promise.reject(new Error("me failed"))))
+    .then((data) => setEmail(data?.username || data?.email || ""))
+    .catch(() => {
+      // don't force logout here — App/AuthContext handles refresh/inactivity
+      console.warn("[ProtectedLayout] /api/me failed; continuing");
+    });
+}, [navigate]);
+
 
   if (loading) {
     return <div className="p-4 text-center">Loading...</div>;

@@ -101,11 +101,29 @@ export function AuthProvider({ children }) {
     });
 
     const interval = setInterval(checkActivity, 60000); // Every 1 min
+
+    const onFocus = () => {
+      const token = localStorage.getItem("botflows_token");
+      if (!token) return;
+      try {
+        const { exp } = jwtDecode(token);
+        if (exp * 1000 - Date.now() < 5 * 60 * 1000) {
+          fetch(`${config.apiBaseUrl}/api/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "x-api-key": config.apiKey },
+          }).then(/* same as above */);
+        }
+      } catch {}
+    };
+    window.addEventListener("focus", onFocus);
+
     return () => {
       events.forEach((event) =>
         window.removeEventListener(event, updateActivity)
       );
       clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
@@ -129,7 +147,7 @@ export function AuthProvider({ children }) {
 
         if (res.ok) {
           const data = await res.json();
-          setUser(data);
+          setUser((prev) => ({ ...(prev || {}), ...data }));
         } else {
           localStorage.removeItem("botflows_token");
           setUser(null);
