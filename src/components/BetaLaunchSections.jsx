@@ -10,23 +10,6 @@ export default function BetaLaunchSections() {
   const { user } = useAuth();
   const sections = [
     {
-      title: "Smarter Browser Automation, Built for Real Life",
-      content: (
-        <>
-          Record clicks, input text, extract table rows, filter data, and build repeatable flows — all without writing code.
-          <ul className="list-disc list-inside mt-3 text-sm text-gray-700">
-            <li>Smart selectors with fallback and recovery</li>
-            <li>Loop over table rows and perform actions</li>
-            <li>Inject dynamic logic and variables</li>
-            <li>Debug your flows with full visibility</li>
-          </ul>
-        </>
-      ),
-      image: "/assets/slides/web-automation-flowchart.svg", 
-      imageAlt: "Screenshot of recording flow",
-      video: "/assets/slides/onboard/basic_flow/grid_export.mp4",
-    },
-    {
       title: "Simple Setup. Powerful Results.",
       content: (
         <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
@@ -41,19 +24,21 @@ export default function BetaLaunchSections() {
       video: "/assets/slides/onboard/basic_flow/agent_install.mp4",
     },
     {
-      title: "Affordable Automation for Startups, Small Teams, and Individuals",
+      title: "Smarter Browser Automation, Built for Real Life",
       content: (
         <>
-          Flowtra is built for small companies, lean teams, and individuals who can’t afford complex RPA tools or scraping services — now you can automate repetitive tasks effortlessly.
+          Record clicks, input text, extract table rows, filter data, and build repeatable flows — all without writing code.
           <ul className="list-disc list-inside mt-3 text-sm text-gray-700">
-            <li>No coding or technical expertise required</li>
-            <li>Eliminate manual, repetitive tasks in minutes</li>
-            <li>Automation Made for Small Teams and Individual</li>
+            <li>Smart selectors with fallback and recovery</li>
+            <li>Loop over table rows and perform actions</li>
+            <li>Inject dynamic logic and variables</li>
+            <li>Debug your flows with full visibility</li>
           </ul>
         </>
       ),
-      image: "/assets/slides/onboarding_1.png",
-      imageAlt: "Illustration of various user types",
+      image: "/assets/slides/web-automation-flowchart.png", 
+      imageAlt: "Screenshot of recording flow",
+      video: "/assets/slides/onboard/basic_flow/grid_export.mp4",
     },
     {
       title: "Custom Bots. Built Just for You.",
@@ -76,6 +61,21 @@ export default function BetaLaunchSections() {
         messagePlaceholder: "Describe your workflow or problem...",
         submitText: "Send Request"
       }
+    },
+    {
+      title: "Affordable Automation for Startups, Small Teams, and Individuals",
+      content: (
+        <>
+          Flowtra is built for small companies, lean teams, and individuals who can’t afford complex RPA tools or scraping services — now you can automate repetitive tasks effortlessly.
+          <ul className="list-disc list-inside mt-3 text-sm text-gray-700">
+            <li>No coding or technical expertise required</li>
+            <li>Eliminate manual, repetitive tasks in minutes</li>
+            <li>Automation Made for Small Teams and Individual</li>
+          </ul>
+        </>
+      ),
+      image: "/assets/slides/onboarding_1.png",
+      imageAlt: "Illustration of various user types",
     },
     {
       title: "Join Early. Shape the Future.",
