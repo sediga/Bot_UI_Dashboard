@@ -22,7 +22,7 @@ export default function BetaLaunchSections() {
           </ul>
         </>
       ),
-      image: "/assets/slides/recording_3.png", 
+      image: "/assets/slides/web-automation-flowchart.svg", 
       imageAlt: "Screenshot of recording flow",
       video: "/assets/slides/onboard/basic_flow/grid_export.mp4",
     },
@@ -36,7 +36,7 @@ export default function BetaLaunchSections() {
           <li>Run in the cloud or locally — your choice</li>
         </ol>
       ),
-      image: "/assets/slides/architecture.png",
+      image: "/assets/slides/architecture_1.png",
       imageAlt: "Architecture diagram of Flowtra setup",
       video: "/assets/slides/onboard/basic_flow/agent_install.mp4",
     },
@@ -52,7 +52,7 @@ export default function BetaLaunchSections() {
           </ul>
         </>
       ),
-      image: "/assets/slides/onboarding.png",
+      image: "/assets/slides/onboarding_1.png",
       imageAlt: "Illustration of various user types",
     },
     {
@@ -90,7 +90,7 @@ export default function BetaLaunchSections() {
           </ul>
         </>
       ),
-      image: "/assets/slides/feedback_1.png", 
+      image: "/assets/slides/feedback_2.png", 
       imageAlt: "Collaborative roadmap image",
       background: "bg-gradient-to-b from-indigo-50 to-white",
       video: "/assets/slides/onboard/basic_flow/feedback_1.mp4",
@@ -129,7 +129,7 @@ export default function BetaLaunchSections() {
           </div>
         </>
       ),
-      image: "/assets/slides/action.png", 
+      image: "/assets/slides/action_1.png", 
       imageAlt: "Join now CTA banner",
       video: "/assets/slides/onboard/basic_flow/signin_1.mp4",
     },
