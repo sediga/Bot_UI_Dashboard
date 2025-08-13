@@ -16,46 +16,6 @@ import TermsOfUse from "./pages/TermsOfUse";
 function App() {
   const { user, login, logout } = useAuth();
 
-  const navigate = useNavigate(); // ✅ This will now work, since App is under <Router>
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const token = localStorage.getItem("botflows_token");
-      if (!token) return;
-
-      try {
-        const { exp } = jwtDecode(token);
-        const now = Date.now();
-        const timeRemaining = exp * 1000 - now;
-
-        if (timeRemaining < 2 * 60 * 1000) {
-          fetch(`${config.apiBaseUrl}/api/auth/refresh`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "x-api-key": config.apiKey },
-          })
-            .then((res) => (res.ok ? res.json() : Promise.reject(new Error("refresh failed"))))
-            .then((data) => {
-              if (data.token) {
-                login(data.token);
-                localStorage.setItem("last_user_activity_time", Date.now().toString()); // ✅ refresh session activity
-              }
-            })
-            .catch((err) => {
-              console.error("Token refresh failed:", err);
-              localStorage.removeItem("botflows_token");
-              logout("inactivity")
-             navigate("/login");
-            });
-        }
-      } catch (e) {
-        console.warn("Error decoding token for refresh");
-      }
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, [navigate]);
-
   return (
     <>
     <GoogleOAuthProvider clientId={config.googleClientId}>

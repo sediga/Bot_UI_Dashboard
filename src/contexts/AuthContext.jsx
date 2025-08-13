@@ -112,7 +112,15 @@ export function AuthProvider({ children }) {
             method: "POST",
             credentials: "include",
             headers: { "x-api-key": config.apiKey },
-          }).then(/* same as above */);
+          })
+            .then((res) => (res.ok ? res.json() : Promise.reject()))
+            .then((data) => {
+              if (data?.token) {
+                login(data.token);
+                localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+              }
+            })
+            .catch(() => logout("inactivity"));
         }
       } catch {}
     };
@@ -164,6 +172,7 @@ export function AuthProvider({ children }) {
     fetchUser();
   }, []);
 
+  
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
       {children}
