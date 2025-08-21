@@ -16,7 +16,8 @@
     "react-dom": "^18.2.0",
     "react-joyride": "^2.9.3",
     "react-responsive-carousel": "^3.2.23",
-    "react-router-dom": "^7.6.3"
+    "react-router-dom": "^7.6.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",

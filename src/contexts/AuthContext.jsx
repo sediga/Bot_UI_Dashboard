@@ -1,5 +1,6 @@
 // src/context/AuthContext.js
 import React, { createContext, useEffect, useState, useContext } from "react";
+import { jwtDecode } from "jwt-decode";
 import { useNavigate } from "react-router-dom";
 import config from "../config";
 
@@ -19,17 +20,25 @@ export function AuthProvider({ children }) {
   const TIMEOUT_MS = 20 * 60 * 1000;
 
   const login = (token) => {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    const userId =
+  let userId = "0";
+  try {
+    const payload = jwtDecode(token);
+    userId =
       payload[
         "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
       ] || "0";
+  } catch (e) {
+    // bad token → clear any partial state and force a clean login
+    localStorage.removeItem("botflows_token");
+    localStorage.removeItem("botflows_userId");
+    return logout("inactivity");
+  }
 
     localStorage.setItem("botflows_token", token);
     localStorage.setItem("botflows_userId", userId);
     localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
 
-    setUser({ token, userId });
+    setUser((prev) => ({ ...(prev || {}), token, userId }));
   };
 
   const logout = (reason) => {
@@ -39,7 +48,10 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
     localStorage.removeItem("botflows_config");
-    localStorage.setItem("logout_reason", reason);
+    localStorage.removeItem(ACTIVITY_KEY); // <-- stop inactivity checks from retriggering
+    // ensure storage event always fires (even for same reason twice)
+    localStorage.removeItem("logout_reason");
+    localStorage.setItem("logout_reason", `${reason}:${Date.now()}`);
     setUser(null);
 
     if (reason === "inactivity") {
@@ -55,8 +67,9 @@ export function AuthProvider({ children }) {
     const onStorageChange = (event) => {
       if (
         (event.key === "botflows_token" && event.newValue === null) ||
-        event.key === "logout_reason"
+        (event.key === "logout_reason" && event.newValue)
       ) {
+        localStorage.removeItem(ACTIVITY_KEY);
         setUser(null);
         navigate("/login");
       }
@@ -77,14 +90,12 @@ export function AuthProvider({ children }) {
       }
     };
 
-    const checkActivity = () => {
-      const last = parseInt(localStorage.getItem(ACTIVITY_KEY), 10);
-      if (!isNaN(last) && Date.now() - last > TIMEOUT_MS) {
-        clearInterval(interval);
-        logout("inactivity");
-      }
-    };
-
+   const checkActivity = () => {
+     const last = parseInt(localStorage.getItem(ACTIVITY_KEY), 10);
+     if (!isNaN(last) && Date.now() - last > TIMEOUT_MS) {
+       logout("inactivity");
+     }
+   };
     // Initial mark
     updateActivity();
 
@@ -94,11 +105,13 @@ export function AuthProvider({ children }) {
     );
 
     // Reset on tab switch
-    document.addEventListener("visibilitychange", () => {
+    const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         updateActivity();
       }
-    });
+    };
+ 
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     const interval = setInterval(checkActivity, 60000); // Every 1 min
 
@@ -113,15 +126,19 @@ export function AuthProvider({ children }) {
             credentials: "include",
             headers: { "x-api-key": config.apiKey },
           })
-            .then((res) => (res.ok ? res.json() : Promise.reject()))
+            .then((res) => (res.ok ? res.json() : Promise.reject({ status: res.status })))
             .then((data) => {
               if (data?.token) {
                 login(data.token);
                 localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
               }
             })
-            .catch(() => logout("inactivity"));
-        }
+            .catch((err) => {
+              if (err && (err.status === 401 || err.status === 403)) {
+                logout("inactivity"); // truly expired/invalid
+              }
+              // else: ignore transient errors; do not log out
+            });        }
       } catch {}
     };
     window.addEventListener("focus", onFocus);
@@ -132,6 +149,7 @@ export function AuthProvider({ children }) {
       );
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
@@ -146,6 +164,7 @@ export function AuthProvider({ children }) {
     const fetchUser = async () => {
       try {
         const res = await fetch(`${config.apiBaseUrl}/api/me`, {
+          credentials: "include",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -156,14 +175,17 @@ export function AuthProvider({ children }) {
         if (res.ok) {
           const data = await res.json();
           setUser((prev) => ({ ...(prev || {}), ...data }));
-        } else {
-          localStorage.removeItem("botflows_token");
-          setUser(null);
+         } else if (res.status === 401 || res.status === 403) {
+           // only clear tokens on real auth failure
+           localStorage.removeItem("botflows_token");
+           localStorage.removeItem("botflows_userId");
+           setUser(null);
+         } else {
+           // transient/server error: keep tokens; optionally log
+           console.warn("/api/me non-auth error:", res.status);
         }
       } catch (err) {
         console.error("Error fetching user", err);
-        localStorage.removeItem("botflows_token");
-        setUser(null);
       } finally {
         setLoading(false);
       }

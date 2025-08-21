@@ -165,7 +165,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
 
       if (attempt <= MAX_RETRIES) {
         console.log(`🔁 Reconnecting WebSocket (${channel}), attempt ${attempt}`);
-        setTimeout(() => connectWebSocket(channel, attempt + 1), RETRY_DELAY);
+        setTimeout(() => connectWebSocket(channel, isMounted, attempt + 1), RETRY_DELAY);
       } else {
         console.error(`❌ Max retries reached for WebSocket (${channel})`);
       }
@@ -212,7 +212,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
 
     return () => {
       isMounted = false;
-      Object.values(socketRef.current).forEach((ws) => ws.close());
+      Object.values(socketRef.current).forEach((ws) => ws?.close?.());
     };
   }, [userId]);
 

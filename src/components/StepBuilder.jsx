@@ -3,7 +3,7 @@ import config from "../config";
 import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
-import SecretMapperModal from "./SecretMapperModal";
+import SecretMapperModal from "./smartsteps/SecretMapperModal";
 
 export default function StepBuilder({
   onEnsureWebSocket,
@@ -158,7 +158,11 @@ function guessSecretName(p) {
               frameContext: payload.frameContext || null,
               frameUrl: payload.frameUrl || null,
               isVisible: payload.isVisible ?? true,
-              computedStyles: payload.computedStyles || {}
+              computedStyles: payload.computedStyles || {},
+              containerSelector: payload.containerSelector || null,
+              signature: payload.signature || null,
+              role: payload.role || null,
+              accessibleName: payload.accessibleName || null,
             };
 
             if (currentLoopIdRef.current) {
@@ -324,11 +328,11 @@ function guessSecretName(p) {
         body: JSON.stringify({ filename: cleanName, steps }),
       });
 
-      const resAgent = await fetch(`${config.agentServerUrl}/api/stop`, {
-        method: "POST",
-        headers
-      });
-      if (!resAgent.ok) throw new Error("Failed to stop recording");
+      // const resAgent = await fetch(`${config.agentServerUrl}/api/stop`, {
+      //   method: "POST",
+      //   headers
+      // });
+      // if (!resAgent.ok) throw new Error("Failed to stop recording");
 
       const data = await res.json();
       alert(data.message || "Flow saved.");

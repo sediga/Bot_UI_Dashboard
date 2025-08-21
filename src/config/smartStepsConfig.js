@@ -10,8 +10,28 @@ const SMART_STEP_CONFIG = [
         emoji: "📊",
         type: "gridExtract",
         fields: ["stepName", "columns", "filters"],
-        agentMode: "target-pick"
-      }
+        agentMode: "target-pick",
+        disabled: false
+      },
+      {
+        id: "extract-api",
+        title: "From API (coming soon)",
+        description: "Extract data from a REST API (requires API URL and key)",
+        emoji: "🌐",
+        type: "apiExtract",
+        fields: ["stepName", "url", "method", "headers", "body"],
+        agentMode: "target-pick",
+        disabled: true
+      },
+    {
+      id: "import-excel",
+      title: "Import Data",
+      description: "Load rows from an Excel (.xlsx) or CSV file.",
+      emoji: "📥",
+      type: "importData",
+      fields: ["stepName", "file", "format", "sheet", "headerRow", "columns"],
+      disabled: false
+    }
     ]
   },
   {
@@ -29,7 +49,8 @@ const SMART_STEP_CONFIG = [
           loopType: "counter",
           actionsPerRow: [],
           parentId: "{{currentLoopId}}"
-        }
+        },
+        disabled: false
       },
       {
         id: "loop-dataset",
@@ -42,7 +63,8 @@ const SMART_STEP_CONFIG = [
           loopType: "dataset",
           actionsPerRow: [],
           parentId: "{{currentLoopId}}"
-        }
+        },
+        disabled: false
       }
     ]
   },
@@ -53,11 +75,22 @@ const SMART_STEP_CONFIG = [
       {
         id: "export-data",
         title: "Export Data",
-        description: "Export extracted data to CSV or JSON file.",
+        description: "Export extracted data from grid/api to CSV or JSON file.",
         emoji: "💾",
         type: "exportData",
-        fields: ["stepName", "sourceStepId", "fileName", "format", "timestamped"]
+        fields: ["stepName", "sourceStepId", "fileName", "format", "timestamped"],
+        disabled: false
+      },
+      {
+        id: "import-data (coming soon)",
+        title: "Import Data",
+        description: "Import data from CSV or JSON file.",
+        emoji: "📥",
+        type: "importData",
+        fields: ["stepName", "destinationStepId", "fileName", "format"],
+        disabled: true
       }
+
     ]
   },
   {

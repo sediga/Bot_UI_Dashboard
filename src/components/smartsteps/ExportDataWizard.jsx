@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel }) => {
+const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep }) => {
   const [selectedSource, setSelectedSource] = useState("");
   const [filename, setFilename] = useState("export.csv");
   const [format, setFormat] = useState("csv");
@@ -82,7 +82,9 @@ const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel }) => {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Export Data</h2>
+      <div className="flex justify-between text-sm text-blue-700 font-semibold">
+        <span>Step 2: Configure</span>
+      </div>
       
       <div>
         <label className="block font-medium mb-1">Step Name:</label>
@@ -203,9 +205,15 @@ const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel }) => {
       )}
 
       {/* Actions */}
-      <div className="flex justify-end space-x-2 pt-2">
-        <button onClick={onCancel} className="bg-gray-400 text-white px-4 py-1 rounded">Cancel</button>
-        <button onClick={handleSubmit} className="bg-blue-600 text-white px-4 py-1 rounded">Add Step</button>
+      <div className="flex justify-between mt-4">
+        <button onClick={() => setStep(1)} className="text-sm text-gray-600">← Back</button>
+        <button
+          onClick={handleSubmit}
+          className="bg-green-600 text-white px-4 py-1 rounded"
+          disabled={!selectedSource || !stepName.trim()}
+        >
+          Add Loop Step
+        </button>
       </div>
     </div>
   );

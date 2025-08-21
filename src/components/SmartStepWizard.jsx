@@ -4,6 +4,8 @@ import { getUniqueSelector } from "../utils/selectorutils";
 import FilterBuilder from "./FilterBuilder";
 import SMART_STEP_CONFIG from "../config/smartStepsConfig";
 import ExportDataWizard from "./smartsteps/ExportDataWizard"
+import { StepCard } from "./StepCard";
+import ImportDataStep from "./smartsteps/ImportDataStep";
 
 export default function SmartStepWizard({
   pickedTarget,
@@ -103,22 +105,23 @@ const handleFinish = () => {
         sourceStep: sourceStep // full gridExtract step
       })
     })
-  } else if (stepType === "export-data") {
-      const sourceStep = availableExtractSteps.find(s => s.id === selectedSource);
-      if(!sourceStep) return;
-      payload = {
-        id: `dataexportStep_${Date.now()}`,
-        type: "exportData",
-        name: stepName,
-        source: selectedSource,
-        format,
-        filename,
-        appendTimestamp,
-        overwrite,
-        columns: selectedColumns,
-        actionsPerRow: []  // Optional, if needed for further logic
-      };
-  }
+  } 
+  // else if (stepType === "export-data") {
+  //     const sourceStep = availableExtractSteps.find(s => s.id === selectedSource);
+  //     if(!sourceStep) return;
+  //     payload = {
+  //       id: `dataexportStep_${Date.now()}`,
+  //       type: "exportData",
+  //       name: stepName,
+  //       source: selectedSource,
+  //       format,
+  //       filename,
+  //       appendTimestamp,
+  //       overwrite,
+  //       columns: selectedColumns,
+  //       actionsPerRow: []  // Optional, if needed for further logic
+  //     };
+  // } 
 
 
   fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
@@ -166,46 +169,55 @@ const handleFinish = () => {
   );
 
   const renderStep1 = () => (
-    <div className="space-y-6">
-      <div className="text-sm font-semibold text-blue-700">Step 1: Choose Type</div>
+// mark comingSoon in your config instead of in the title text
+// e.g., { title: "From API", comingSoon: true, disabled: true }
 
-      <div className="space-y-4">
-        {SMART_STEP_CONFIG.map(({ category, emoji, steps }) => (
-          <div key={category}>
-            <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">
-              {emoji} {category}
-            </h4>
-            <div className="grid grid-cols-2 gap-4">
-              {steps.map((s) =>
-                stepCard(s.title, s.description, async () => {
-                  setStepType(s.id);
-                  setStepConfig(s);
-                  setFieldValues({});
-                  setStep(2);
+<div className="space-y-5">
+  <div className="text-sm font-semibold text-blue-700">Step 1: Choose Type</div>
 
-                  if (s.agentMode === "target-pick") {
-                    await startGridPick();
-                  }
-                })
-              )}
-            </div>
-          </div>
-        ))}
+  {SMART_STEP_CONFIG.map(({ category, emoji, steps }) => (
+    <section key={category} className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm">{emoji}</span>
+        <h4 className="text-[11px] font-bold tracking-wide uppercase text-gray-500">
+          {category}
+        </h4>
+        <div className="h-px flex-1 bg-gray-200" />
       </div>
 
-      <button
-        onClick={handleCancel}
-        className="text-sm text-red-600 underline mt-4 block"
-      >
-        Cancel
-      </button>
-    </div>
+      {/* denser grid; scales nicely */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {steps.map((s) => (
+          <StepCard
+            key={s.id}
+            title={s.title}
+            description={s.description}
+            emoji={s.emoji}
+            disabled={s.disabled}
+            comingSoon={s.comingSoon}
+            onClick={async () => {
+              if (s.disabled) return;
+              setStepType(s.id);
+              setStepConfig(s);
+              setFieldValues({});
+              setStep(2);
+              if (s.agentMode === "target-pick") await startGridPick();
+            }}
+          />
+        ))}
+      </div>
+    </section>
+  ))}
+
+  <button onClick={handleCancel} className="text-sm text-red-600 underline mt-2">
+    Cancel
+  </button>
+</div>
   );
 
   const renderExtractGrid = () => (
     <div className="space-y-4">
       <div className="flex justify-between text-sm text-blue-700 font-semibold">
-        <span>Step 1: Choose Type</span>
         <span>Step 2: Configure</span>
       </div>
 
@@ -281,7 +293,6 @@ const handleFinish = () => {
   const renderLoopCounter = () => (
     <div className="space-y-4">
       <div className="flex justify-between text-sm text-blue-700 font-semibold">
-        <span>Step 1: Choose Type</span>
         <span>Step 2: Configure</span>
       </div>
 
@@ -322,7 +333,6 @@ const handleFinish = () => {
   const renderLoopDataset = () => (
     <div className="space-y-4">
       <div className="flex justify-between text-sm text-blue-700 font-semibold">
-        <span>Step 1: Choose Type</span>
         <span>Step 2: Configure</span>
       </div>
 
@@ -373,6 +383,22 @@ const handleFinish = () => {
         onCancel();
       }}
       onCancel={onCancel}
+      setStep={setStep}
+    />
+  );
+
+  const renderImportExcelData = () => (
+    <ImportDataStep
+      token={localStorage.getItem("botflows_token") || ""}
+      onCancel={() => setStep(1)}
+      onSave={(step) => {
+  try {
+    onSmartStepCreated(step);
+  } catch (e) {
+    console.error("onSmartStepCreated failed:", e);
+  }
+        setStep(1);
+      }}
     />
   );
 
@@ -399,6 +425,7 @@ const handleFinish = () => {
       {step === 2 && stepType === "loop-counter" && renderLoopCounter()}
       {step === 2 && stepType === "loop-dataset" && renderLoopDataset()}
       {step === 2 && stepType === "export-data" && renderExportData()}
+      {step === 2 && stepType === "import-excel" && renderImportExcelData()}
     </div>
   );
 }

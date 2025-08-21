@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import config from "../config";
+import config from "../../config";
 
 export default function SecretMapperModal({ open, onClose, eventId, suggestedName, onMapped }) {
   const [name, setName] = useState("");
@@ -110,18 +110,6 @@ export default function SecretMapperModal({ open, onClose, eventId, suggestedNam
           </label>
 
           {/* Optional search (only helpful when list is long) */}
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Search secrets…"
-              className="w-full rounded-lg border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="Search secrets"
-            />
-            <span className="text-xs text-neutral-500 tabular-nums">{filtered.length}</span>
-          </div>
-
           <select
             className="w-full rounded-lg border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={name}

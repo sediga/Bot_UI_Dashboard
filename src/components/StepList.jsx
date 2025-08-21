@@ -4,7 +4,11 @@ import SmartStepWizard from "./SmartStepWizard";
 import Modal from "./SmartStepModal";
 import config from "../config";
 import ParameterMappingModal from "./ParameterMappingModal";
-import SecretMapperModal from "./SecretMapperModal";
+import SecretMapperModal from "./smartsteps/SecretMapperModal";
+
+import ValueWithMapper from "./smartsteps/ValueWithMapper";
+import { getLoopColumns } from "./smartsteps/getLoopColumns";
+import ColumnContextMenu from "./smartsteps/ColumnContextMenu";
 
 export default function StepList({
   steps,
@@ -22,11 +26,59 @@ export default function StepList({
   const [showParamModal, setShowParamModal] = useState(false);
   const [pendingStep, setPendingStep] = useState(null);
   const [loopColumns, setLoopColumns] = useState([]);
+  // const columns = getLoopColumns(flow, parentLoopStep);
 
   const [showSecretModal, setShowSecretModal] = useState(false);
   const [secretCtx, setSecretCtx] = useState(null);
+// near other useState calls
+const [editingValueStepId, setEditingValueStepId] = useState(null);
+ const [columnMenu, setColumnMenu] = useState({
+   open: false, x: 0, y: 0, stepId: null, columns: []
+ });
 
-  const guessSecretName = (s) => {
+// keep an input ref per step so we can insert at caret
+const valueInputRefs = useRef({});
+
+function sanitize(next) {
+  // trim outer quotes and whitespace
+  if (typeof next === "string") {
+    next = next.trim();
+    if ((next.startsWith('"') && next.endsWith('"')) ||
+        (next.startsWith("'") && next.endsWith("'"))) {
+      next = next.slice(1, -1);
+    }
+  }
+  return next;
+}
+
+function applyValue(stepId, token) {
+  setSteps(prev =>
+    prev.map(s => {
+      if (s.id !== stepId) return s;
+      const el = valueInputRefs.current[stepId];
+      const current = s.value || "";
+      let next = token;
+
+      // If the input is focused, insert at caret; otherwise replace whole value
+      if (el && document.activeElement === el) {
+        const start = el.selectionStart ?? current.length;
+        const end   = el.selectionEnd ?? current.length;
+        next = current.slice(0, start) + token + current.slice(end);
+      }
+
+      next = sanitize(next);
+
+      return {
+        ...s,
+        value: next,
+        dynamicValue: next,
+        label: `${(s.action || "Action").replace(/^./, c => c.toUpperCase())}: ${next}`,
+      };
+    })
+  );
+}
+
+ const guessSecretName = (s) => {
     const a = s?.attributes || {};
     const pick =
       s?.label ||
@@ -42,6 +94,8 @@ export default function StepList({
       .replace(/^_+|_+$/g, "")
       .slice(0, 40) || "secret";
   };  
+const updateStep = (id, patch) =>
+  setSteps(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
 
   useEffect(() => {
     const initialExpanded = {};
@@ -108,7 +162,7 @@ export default function StepList({
     }).catch((err) => console.error("Failed to notify agent on cancel:", err));
   };
 
-  const extractSteps = steps.filter((step) => step.type === "gridExtract");
+  const extractSteps = steps.filter((step) => ["gridExtract","importData"].includes(step.type));
   const canAddSmartStep =
     agentStatus === "recording" && !showSmartWizard && currentLoopId === null;
 
@@ -158,7 +212,27 @@ export default function StepList({
     const hasChildren = steps.some((s) => s.parentId === step.id);
     const isRecording = currentLoopId === step.id;
     const isFinalized = finalizedLoops.has(step.id);
-
+ const parentLoop = steps.find(s => s.id === step.parentId && s.type === "dataLoop");
+const columnsForThisStep = (() => {
+  if (!parentLoop) return [];
+  // resolve source step id (string or {stepId})
+  const sourceId = typeof parentLoop.source === "string"
+    ? parentLoop.source
+    : (parentLoop.source?.stepId || parentLoop.source);
+  const src = steps.find(s => s.id === sourceId);
+  if (!src) return [];
+  if (src.type === "gridExtract") {
+    return (src.columnMappings || [])
+      .map(c => c?.header?.header)
+      .filter(Boolean);
+  }
+  if (src.type === "importData") {
+    return (src.columns || [])
+      .map(c => (typeof c === "string" ? c : c?.name))
+      .filter(Boolean);
+  }
+  return [];
+})(); 
     return (
       <li
         key={step.id}
@@ -187,23 +261,87 @@ export default function StepList({
                   )}
                 </span>
                 {step.value && (
-                  <button
-                    className="text-green-700 ml-1 underline decoration-dotted hover:text-green-800"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSecretCtx({
-                        eventId: step.eventId || step.id, // fallback if eventId missing
-                        stepId: step.id,
-                        suggestedName: guessSecretName(step),
-                      });
-                      setShowSecretModal(true);
-                    }}
-                    title="Click to map to an agent secret"
-                  >
-                    = "{step.value}"
-                  </button>
-                )}
-                {step.validationStatus === "failed" && (
+                  editingValueStepId === step.id ? (
+                    <div className="mt-2 space-y-2">
+                       {/* Text box shows current mapping/value */}
+                      <input
+                        ref={el => { valueInputRefs.current[step.id] = el; }}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        value={step.value || ""}
+                        onChange={(e) => {
+                          const v = sanitize(e.target.value);
+                          updateStep(step.id, {
+                            value: v,
+                            dynamicValue: v,
+                            label: `${(step.action || "Action").replace(/^./, c => c.toUpperCase())}: ${v}`
+                          });
+                        }}
+                        placeholder='e.g. {{row.Column}} or {{secret:agent/key}}'
+                      />
+                
+                       <div className="flex items-center gap-3">
+                         {/* Map (column) – opens context menu */}
+                         <button
+                           className={`text-xs underline ${columnsForThisStep.length ? "text-blue-600" : "text-gray-400 cursor-not-allowed"}`}
+                           disabled={!columnsForThisStep.length}
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setColumnMenu({
+                               open: true,
+                               x: e.clientX,
+                               y: e.clientY,
+                               stepId: step.id,
+                               columns: columnsForThisStep,
+                             });
+                           }}
+                           title={columnsForThisStep.length ? "Map from loop column" : "No columns (not inside a data loop)"}
+                         >
+                           Map Column
+                         </button>
+                
+                         <span className="text-gray-300">|</span>
+                
+                         {/* Map Secret – unchanged */}
+                         <button
+                           className="text-xs text-green-700 underline"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setSecretCtx({
+                               eventId: step.eventId || step.id,
+                               stepId: step.id,
+                               suggestedName: guessSecretName(step),
+                             });
+                             setShowSecretModal(true);
+                           }}
+                         >
+                           Map Secret
+                        </button>
+
+                        <button
+                          className="text-xs text-gray-600 underline"
+                          onClick={() => setEditingValueStepId(null)}
+                        >
+                          Done
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        Tip: <code>{'{{row.Column}}'}</code> for loop data, <code className="ml-1">{'{{secret:agent/key}}'}</code> for secrets.
+                      </div>
+                    </div>
+                  ) : (
+                    // collapsed view — click to edit just this step
+                    <button
+                      className="text-green-700 ml-1 underline decoration-dotted hover:text-green-800"
+                      title="Edit or map this value"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingValueStepId(step.id);
+                      }}
+                    >
+                      ={` "${step.value}"`}
+                    </button>
+                  )
+                )}                {step.validationStatus === "failed" && (
                   <div className="inline-flex items-center ml-2 text-yellow-600 group relative">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -309,6 +447,27 @@ export default function StepList({
                   </ul>
                 </div>
               )}
+            </div>
+          )}
+
+          {step.type === "importData" && (
+            <div className="p-2 rounded border bg-green-50">
+              <div className="font-semibold text-green-700">
+                {step.name || `Grid Extract (${step.id})`}
+              </div>
+              <div className="text-xs text-gray-600 mb-2">
+                <strong>ID:</strong> <code>{step.id}</code>
+              </div>
+              <div className="text-xs text-gray-600 mb-2">
+                <strong>Path:</strong> <code>{step.file?.path}</code>
+              </div>
+              <ul className="text-sm list-disc pl-4 mb-2">
+                {step.columns?.map((col, index) => (
+                  <li key={index}>
+                    {col}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -443,27 +602,26 @@ export default function StepList({
               setShowSecretModal(false);
               setSecretCtx(null);
             }}
-            onMapped={(mappedScope, name) => {
-              // mappedScope should be "agent"
-              setSteps((prev) =>
-                prev.map((s) =>
-                  s.id === secretCtx.stepId
-                    ? {
-                        ...s,
-                        value: `{{secret:${mappedScope}/${name}}}`,
-                        dynamicValue: `{{secret:${mappedScope}/${name}}}`,
-                        secretRef: `${mappedScope}/${name}`,
-                        isSensitive: true,
-                        label: `${(s.action || "Action").replace(/^./, c => c.toUpperCase())}: {{secret:${mappedScope}/${name}}}`,
-                      }
-                    : s
-                )
-              );
+            onMapped={(scope, name) => {
+              applyValue(secretCtx.stepId, `{{secret:${scope}/${name}}}`, { mode: "replace" });
               setShowSecretModal(false);
               setSecretCtx(null);
-            }}
-          />
-        )}      </div>
+            }}          />
+        )}      
+        <ColumnContextMenu
+          open={columnMenu.open}
+          x={columnMenu.x}
+          y={columnMenu.y}
+          columns={columnMenu.columns}
+          onSelect={(col) => {
+            const token = `{{row.${col}}}`;
+            // replace/insert value for this step (your helper)
+            applyValue(columnMenu.stepId, token);
+            setColumnMenu(cm => ({ ...cm, open: false }));
+          }}
+          onClose={() => setColumnMenu(cm => ({ ...cm, open: false }))}
+        />
+        </div>
     </section>
   );
 }

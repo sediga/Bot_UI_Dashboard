@@ -19,29 +19,44 @@ const ProtectedLayout = ({ children }) => {
 useEffect(() => {
   const token = localStorage.getItem("botflows_token");
   if (!token) {
-    // no token -> just go to login; don't call logout() here
     navigate("/login");
     return;
   }
 
-  // render the page; don't block on /api/me
-  setLoading(false);
+  setLoading(false); // render right away
 
-  // fire-and-forget: fetch profile to show email
-  fetch(`${config.apiBaseUrl}/api/me`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "x-api-key": config.apiKey,
-    },
-    credentials: "include",
-  })
-    .then((res) => (res.ok ? res.json() : Promise.reject(new Error("me failed"))))
-    .then((data) => setEmail(data?.username || data?.email || ""))
-    .catch(() => {
-      // don't force logout here — App/AuthContext handles refresh/inactivity
-      console.warn("[ProtectedLayout] /api/me failed; continuing");
-    });
-}, [navigate]);
+  let cancelled = false;
+  (async () => {
+    try {
+      const res = await fetch(`${config.apiBaseUrl}/api/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "x-api-key": config.apiKey,
+        },
+        credentials: "include",
+      });
+
+      if (res.status === 401 || res.status === 419) {
+        if (!cancelled) {
+          // session expired: bounce to login
+          logout?.();
+          navigate("/login");
+        }
+        return;
+      }
+
+      if (!res.ok) throw new Error("me failed");
+      const data = await res.json();
+      if (!cancelled) setEmail(data?.username || data?.email || "");
+    } catch (e) {
+      console.warn("[ProtectedLayout] /api/me failed; continuing", e);
+      // optionally show a toast
+    }
+  })();
+
+  return () => { cancelled = true; };
+}, [navigate, logout]);
+
 
 
   if (loading) {
