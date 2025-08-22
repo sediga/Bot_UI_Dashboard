@@ -26,6 +26,13 @@ export default function CreatePanel({
   const isMacOS = () => /Mac/i.test(navigator.platform || navigator.userAgent);
   const showMacWarning = isMacOS();
 
+  function openCustomProtocol(href) {
+  // Must be user-gesture initiated in modern browsers.
+  // Use a normal window.location change — the OS will hand off to the app handler.
+  // If not installed, nothing happens; the page stays.
+  window.location.href = href;
+}
+
   return (
     <main className="relative flex h-full w-full overflow-hidden">
       {/* macOS Warning Overlay */}
@@ -64,7 +71,6 @@ export default function CreatePanel({
       >
         Download Flowtra Agent
       </button>
-
       <div className="p-3 bg-gray-50 border border-gray-300 text-sm text-gray-800 rounded">
         <strong>Note:</strong> This installer is not digitally signed yet.<br />
         If you see a SmartScreen warning in Windows:
@@ -73,6 +79,20 @@ export default function CreatePanel({
           <li>Then click <em>"Run anyway"</em></li>
         </ul>
       </div>
+      <p className="text-sm mb-4">
+        If you have already installed the agent, please ensure it is running. You can start it from your programs menu.
+      </p>
+
+      <button
+        className="installAgent mb-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+        onClick={() => {
+          const token = Math.random().toString(36).slice(2);
+          openCustomProtocol(`flowtra://bootstrap?token=${encodeURIComponent(token)}`);
+        }}
+      >
+        Start Flowtra Agent
+      </button>
+
     </div>
   </div>
 )}

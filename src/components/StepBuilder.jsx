@@ -444,12 +444,12 @@ const loadFlow = async (selectedFlow) => {
         <div className="flex gap-2 items-center">
           <input
             type="text"
-            className="border p-2 w-full rounded"
+            className="enterUrl border p-2 w-full rounded"
             placeholder="Enter URL..."
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
           />
-          <button onClick={handleNavigate} className="bg-blue-600 text-white px-3 py-2 rounded">Record</button>
+          <button onClick={handleNavigate} className="record bg-blue-600 text-white px-3 py-2 rounded">Record</button>
           <button onClick={() => setShowSavePopup(true)} className="bg-green-600 text-white px-3 py-2 rounded">Save</button>
           <button onClick={handlePreviewReplay} className="bg-purple-600 text-white px-3 py-2 rounded">Preview</button>
         </div>

@@ -9,6 +9,14 @@ const DashboardTour = ({ run, setRun }) => {
     {
         target: ".installInfo",
         content: "Pay attention to this, very importent while installing"
+    },
+    {
+      target: ".enterUrl",
+      content: "Enter your URL and click recording"
+    },
+    {
+      target: ".record",
+      content: "Click here to record, and wait for new browser to open and navigate to your URL, If browser does not open, Please check your agent settings and test browser!"
     }
   ];
 
