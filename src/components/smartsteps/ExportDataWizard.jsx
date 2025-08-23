@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 
 const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep }) => {
+const defaultFolder =
+  navigator.platform.startsWith("Win")
+    ? "C:\\Users\\<you>\\Flowtra\\exports"
+    : "/Users/<you>/Flowtra/exports";
   const [selectedSource, setSelectedSource] = useState("");
-  const [filename, setFilename] = useState("export.csv");
+  const [filename, setFilename] = useState(`export.csv`);
   const [format, setFormat] = useState("csv");
   const [folderPath, setFolderPath] = useState("");
   const [appendTimestamp, setAppendTimestamp] = useState(true);
@@ -54,13 +58,25 @@ const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep }
   };
 
   const getFinalNamePreview = () => {
-    const base = filename.replace(/\.[^/.]+$/, "");
+    if (!filename) return "";
+
+    // Strip extension, we’ll add current format back
+    const baseName = filename.replace(/\.[^/.]+$/, "");
     const suffix = appendTimestamp
       ? `_${new Date().toISOString().replace(/[:.]/g, "-")}`
       : "";
-    return `${base}${suffix}.${format}`;
+    const finalName = `${baseName}${suffix}.${format}`;
+
+    // If user typed path (has / or \), trust it; otherwise prepend default folder
+    if (filename.includes("/") || filename.includes("\\")) {
+      return finalName;
+    } else {
+      const sep = defaultFolder.includes("\\") ? "\\" : "/";
+      return `${defaultFolder.replace(/[\\/]+$/, "")}${sep}${finalName}`;
+    }
   };
 
+  
   const handleSubmit = () => {
     if (!selectedSource || !filename || !stepName) return;
 
@@ -116,7 +132,7 @@ const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep }
 
       {/* Filename with simulated file picker */}
       <div>
-        <label className="block font-medium mb-1">Filename:</label>
+        <label className="block font-medium mb-1">File path:</label>
         <div className="flex gap-2">
           <input
             type="text"
@@ -135,7 +151,7 @@ const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep }
         />
         {filename && (
           <div className="text-xs text-gray-500 mt-1">
-            Final filename: <code>{getFinalNamePreview()}</code>
+            Final path: <code>{getFinalNamePreview()}</code>
           </div>
         )}
       </div>
