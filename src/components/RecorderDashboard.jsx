@@ -174,7 +174,7 @@ function connectWebSocket(channel, isMounted, attempt = 1) {
     ws.onmessage = (event) => {
       try {
         console.log(`📨 Message on ${channel}`);
-        console.log(`Current Loop Id in Dashboard : ${currentLoopId}`)
+        // console.log(`Current Loop Id in Dashboard : ${currentLoopId}`)
         const raw = JSON.parse(event.data);
         if (!isMounted) return;
 

@@ -83,7 +83,7 @@ export default function CreatePanel({
         If you have already installed the agent, please ensure it is running. You can start it from your programs menu.
       </p>
 
-      <button
+      {/* <button
         className="installAgent mb-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
         onClick={() => {
           const token = Math.random().toString(36).slice(2);
@@ -91,7 +91,7 @@ export default function CreatePanel({
         }}
       >
         Start Flowtra Agent
-      </button>
+      </button> */}
 
     </div>
   </div>

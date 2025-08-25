@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep }) => {
 const defaultFolder =
   navigator.platform.startsWith("Win")
-    ? "C:\\Users\\<you>\\Flowtra\\exports"
+    ? "C:\\Users\\<you>\\Documents\\Flowtra\\exports"
     : "/Users/<you>/Flowtra/exports";
   const [selectedSource, setSelectedSource] = useState("");
   const [filename, setFilename] = useState(`export.csv`);
