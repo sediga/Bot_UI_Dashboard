@@ -9,29 +9,88 @@ export default function SecretMapperModal({ open, onClose, eventId, suggestedNam
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
 
+  // polling refs
+  const pollTimerRef = useRef(null);
+  const inFlightRef = useRef(false);
+
+  async function fetchSecrets({ signal } = {}) {
+    try {
+      const res = await fetch(`${config.agentServerUrl}/api/secrets`, {
+        cache: "no-store",
+        signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setAgentList(list);
+      setLoadErr("");
+      return list;
+    } catch (e) {
+      setAgentList([]);
+      setLoadErr("Couldn’t load secrets from agent.");
+      return [];
+    }
+  }
+
+  // initial load on open
   useEffect(() => {
     if (!open) return;
     setName(suggestedName || "");
     setQuery("");
     setLoadErr("");
-    (async () => {
-      try {
-        const res = await fetch(`${config.agentServerUrl}/api/secrets`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setAgentList(Array.isArray(data) ? data : []);
-      } catch (e) {
-        setAgentList([]);
-        setLoadErr("Couldn’t load secrets from agent.");
-      }
-    })();
+    const ac = new AbortController();
+    fetchSecrets({ signal: ac.signal });
+    return () => ac.abort();
   }, [open, suggestedName]);
 
+  // focus name input on open
   useEffect(() => {
     if (!open) return;
-    // focus name input on open
     const t = setTimeout(() => inputRef.current?.focus(), 60);
     return () => clearTimeout(t);
+  }, [open]);
+
+  // start/stop polling
+  function stopPolling() {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }
+
+  function startPolling({ interval = 1500, timeoutMs = 120000 } = {}) {
+    if (pollTimerRef.current) return; // already polling
+    const started = Date.now();
+
+    pollTimerRef.current = setInterval(async () => {
+      if (!open) return stopPolling();
+      if (document.visibilityState === "hidden") return; // pause in background
+      if (Date.now() - started > timeoutMs) return stopPolling();
+      if (inFlightRef.current) return;
+
+      try {
+        inFlightRef.current = true;
+        const next = await fetchSecrets();
+        // stop once something exists
+        if (next.length > 0) stopPolling();
+      } finally {
+        inFlightRef.current = false;
+      }
+    }, interval);
+  }
+
+  // stop polling when modal closes/unmounts
+  useEffect(() => {
+    if (!open) stopPolling();
+    return stopPolling;
+  }, [open]);
+
+  // refresh once when window regains focus (useful after adding a secret in Agent)
+  useEffect(() => {
+    if (!open) return;
+    const onFocus = () => fetchSecrets();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [open]);
 
   const knownNames = useMemo(() => new Set(agentList.map(s => s.name)), [agentList]);
@@ -57,7 +116,7 @@ export default function SecretMapperModal({ open, onClose, eventId, suggestedNam
 
     setLoading(true);
     try {
-      onMapped?.("agent", trimmed); // reflect locally
+      onMapped?.("agent", trimmed);
       await hideOverlay();
       onClose();
     } finally {
@@ -75,6 +134,19 @@ export default function SecretMapperModal({ open, onClose, eventId, suggestedNam
   }, [agentList, query]);
 
   if (!open) return null;
+
+  // silently open Agent settings and start polling
+  async function handleOpenAgentSettings(e) {
+    e?.preventDefault?.();
+    try {
+      // Prefer POST for "do something" actions; fall back to GET if needed
+      const res = await fetch(`${config.agentServerUrl}/api/open-secrets`, { method: "POST" });
+      if (!res.ok) {
+        await fetch(`${config.agentServerUrl}/api/open-secrets`, { method: "GET" });
+      }
+    } catch {}
+    startPolling({ interval: 1500, timeoutMs: 120000 });
+  }
 
   return (
     <div
@@ -103,13 +175,37 @@ export default function SecretMapperModal({ open, onClose, eventId, suggestedNam
           </div>
         </div>
 
+        {/* How it works */}
+        <details className="mt-2 mb-3 rounded-lg border border-neutral-200 px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">How secrets work</summary>
+          <div className="mt-2 text-sm text-neutral-700 space-y-2">
+            <p><strong>1)</strong> Create secrets in your <em>Agent</em>. They never leave your computer.</p>
+            <p><strong>2)</strong> Map sensitive fields here to a secret <em>name</em> (not the value).</p>
+            <p><strong>3)</strong> During replay, the Agent fills the real value securely.</p>
+            <div className="pt-1">
+              <button
+                type="button"
+                className="text-blue-600 hover:underline"
+                onClick={handleOpenAgentSettings}
+              >
+                Open Agent Settings
+              </button>
+            </div>
+          </div>
+        </details>
+
         {/* Existing secrets */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-neutral-700">
-            Existing secret
-          </label>
+          <label className="block text-sm font-medium text-neutral-700">Existing secret</label>
 
-          {/* Optional search (only helpful when list is long) */}
+          {/* Optional search */}
+          <input
+            className="w-full mb-2 rounded-lg border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search secrets…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+
           <select
             className="w-full rounded-lg border border-neutral-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={name}
@@ -124,12 +220,27 @@ export default function SecretMapperModal({ open, onClose, eventId, suggestedNam
             ))}
           </select>
 
-          {/* Loading / error / empty */}
-          {loadErr && (
-            <p className="text-sm text-red-600">{loadErr}</p>
-          )}
+          {loadErr && <p className="text-sm text-red-600">{loadErr}</p>}
           {!loadErr && !filtered.length && (
-            <p className="text-sm text-neutral-500">No secrets found.</p>
+            <div className="text-sm text-neutral-600">
+              <p>No secrets found. Secrets can only be added at agent and stays local for security reasons.</p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded border border-neutral-300 hover:bg-neutral-100"
+                  onClick={() => fetchSecrets()}
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded border border-neutral-300 hover:bg-neutral-100"
+                  onClick={handleOpenAgentSettings}
+                >
+                  Open Agent Settings
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
@@ -164,7 +275,7 @@ export default function SecretMapperModal({ open, onClose, eventId, suggestedNam
         <div className="mt-6 flex justify-end gap-2">
           <button
             className="px-4 py-2 rounded-lg border border-neutral-200 hover:bg-neutral-50"
-            onClick={async () => { await hideOverlay(); onClose(); }}
+            onClick={async () => { stopPolling(); await hideOverlay(); onClose(); }}
             disabled={loading}
           >
             Cancel
