@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
     // bad token → clear any partial state and force a clean login
     localStorage.removeItem("botflows_token");
     localStorage.removeItem("botflows_userId");
-    return logout("inactivity");
+    return logout("Error");
   }
 
     localStorage.setItem("botflows_token", token);
@@ -135,7 +135,7 @@ export function AuthProvider({ children }) {
             })
             .catch((err) => {
               if (err && (err.status === 401 || err.status === 403)) {
-                logout("inactivity"); // truly expired/invalid
+                logout("Error"); // truly expired/invalid
               }
               // else: ignore transient errors; do not log out
             });        }

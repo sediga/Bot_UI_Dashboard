@@ -121,71 +121,143 @@ export default function RecorderDashboard() {
   const MAX_RETRIES = 5;
   const RETRY_DELAY = 3000; // ms
   const socketRef = useRef({});
+  const CONNECT_LOCKS = {};
 
-  function ensureWebSocket(channel, isMounted) {
-    return new Promise((resolve, reject) => {
-      const existing = socketRef.current[channel];
-      if (existing && existing.readyState === WebSocket.OPEN) {
-        return resolve(existing);
-      }
-
-      connectWebSocket(channel, isMounted);
-      const interval = setInterval(() => {
-        const ws = socketRef.current[channel];
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          clearInterval(interval);
-          resolve(ws);
-        }
-      }, 300);
-
-      setTimeout(() => {
-        clearInterval(interval);
-        reject(`WebSocket connection timeout: ${channel}`);
-      }, 3000);
-    });
+  function withConnectLock(channel, fn) {
+    const prev = CONNECT_LOCKS[channel] || Promise.resolve();
+    const next = prev.finally(fn);
+    CONNECT_LOCKS[channel] = next.catch(() => {}); // keep chain alive
+    return next;
   }
 
-function connectWebSocket(channel, isMounted, attempt = 1) {
-    const ws = new WebSocket(
-      `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`
-    );
+  const MAX_BACKOFF_MS = 30000;
+  function backoffDelay(attempt) {
+    const base = Math.min(MAX_BACKOFF_MS, Math.pow(2, Math.min(attempt, 6)) * 1000);
+    const jitter = Math.floor(Math.random() * 500);
+    return base + jitter; // 1s,2s,4s,8s,16s,32s (capped) + jitter
+  }
+
+  function startHeartbeat(channel) {
+    const entry = socketRef.current[channel];
+    if (!entry) return;
+
+    // Clear old timers
+    clearHeartbeat(channel);
+
+    // App-level ping every 25s
+    entry.timers = entry.timers || {};
+    entry.timers.ping = setInterval(() => {
+      try {
+        entry.ws?.readyState === WebSocket.OPEN &&
+          entry.ws.send(JSON.stringify({ type: "ping" }));
+      } catch {}
+    }, 25000);
+
+    // Idle watchdog: no inbound for 60s -> force reconnect
+    entry.lastSeen = Date.now();
+    entry.timers.watchdog = setInterval(() => {
+      const idleMs = Date.now() - (entry.lastSeen || 0);
+      if (idleMs > 60000 && entry.ws?.readyState === WebSocket.OPEN) {
+        try { entry.ws.close(4000, "idle-timeout"); } catch {}
+      }
+    }, 10000);
+  }
+
+  function clearHeartbeat(channel) {
+    const entry = socketRef.current[channel];
+    if (!entry || !entry.timers) return;
+    Object.values(entry.timers).forEach(t => clearInterval(t));
+    entry.timers = {};
+  }
+
+  function ensureWebSocket(channel, isMounted) {
+    return withConnectLock(channel, () => new Promise((resolve, reject) => {
+      const entry = socketRef.current[channel];
+      if (entry?.ws && entry.ws.readyState === WebSocket.OPEN) {
+        return resolve(entry.ws);
+      }
+      // set a one-shot resolver to be called on onopen
+      socketRef.current[channel] = entry || {};
+      socketRef.current[channel].resolver = resolve;
+
+      // kick off connect if not already connecting
+      if (!entry?.connecting) {
+        connectWebSocket(channel, isMounted, 1);
+      }
+
+      // safety timeout
+      const to = setTimeout(() => {
+        if (socketRef.current[channel]?.resolver === resolve) {
+          socketRef.current[channel].resolver = null;
+        }
+        reject(new Error(`WebSocket connection timeout: ${channel}`));
+      }, 8000);
+
+      // wrap resolve to clear timeout
+      const origResolve = resolve;
+      socketRef.current[channel].resolver = (ws) => {
+        clearTimeout(to);
+        origResolve(ws);
+      };
+    }));
+  }
+
+  function connectWebSocket(channel, isMounted, attempt = 1) {
+    if (!userId || !isMounted) return;
+
+    // prevent parallel connects
+    if (socketRef.current[channel]?.connecting) return;
+    socketRef.current[channel] = socketRef.current[channel] || {};
+    socketRef.current[channel].connecting = true;
+
+    const url = `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`;
+    const ws = new WebSocket(url);
 
     ws.onopen = () => {
-      console.log(`✅ WebSocket connected (${channel})`);
-      socketRef.current[channel] = ws;
-    };
-
-    ws.onerror = (err) => {
-      console.error(`❌ WebSocket error (${channel})`, err);
-    };
-
-    ws.onclose = () => {
-      console.warn(`⚠️ WebSocket closed (${channel})`);
-      socketRef.current[channel] = null;
-
-      if (attempt <= MAX_RETRIES) {
-        console.log(`🔁 Reconnecting WebSocket (${channel}), attempt ${attempt}`);
-        setTimeout(() => connectWebSocket(channel, isMounted, attempt + 1), RETRY_DELAY);
-      } else {
-        console.error(`❌ Max retries reached for WebSocket (${channel})`);
-      }
+      socketRef.current[channel].ws = ws;
+      socketRef.current[channel].connecting = false;
+      startHeartbeat(channel);
+      attempt = 1; // reset backoff
+      // Optionally send a small handshake for your server
+      try { ws.send(JSON.stringify({ type: "ready", sessionId: userId })); } catch {}
+      // resolve any pending ensureWebSocket waiters
+      socketRef.current[channel].resolver && socketRef.current[channel].resolver(ws);
+      socketRef.current[channel].resolver = null;
     };
 
     ws.onmessage = (event) => {
+      const entry = socketRef.current[channel];
+      if (!isMounted || !entry) return;
+      entry.lastSeen = Date.now();
       try {
-        console.log(`📨 Message on ${channel}`);
-        // console.log(`Current Loop Id in Dashboard : ${currentLoopId}`)
         const raw = JSON.parse(event.data);
-        if (!isMounted) return;
-
         if (activeTabRef.current === "replay") {
-          setReplayMessages((prev) => [...prev, { ...raw, _channel: channel }]);
+          setReplayMessages(prev => [...prev, { ...raw, _channel: channel }]);
         } else if (activeTabRef.current === "create") {
-          setRecordMessages((prev) => [...prev, { ...raw, _channel: channel }]);
+          setRecordMessages(prev => [...prev, { ...raw, _channel: channel }]);
         }
-      } catch (err) {
-        console.error(`❌ Failed to parse WS (${channel})`, err);
+      } catch (e) {
+        console.error(`Failed to parse WS (${channel})`, e);
       }
+    };
+
+    ws.onerror = (err) => {
+      // browsers don’t give much detail; logging is still useful
+      console.warn(`WebSocket error (${channel})`, err);
+    };
+
+    ws.onclose = (ev) => {
+      const entry = socketRef.current[channel];
+      if (entry?.ws === ws) {
+        clearHeartbeat(channel);
+        socketRef.current[channel] = { ...entry, ws: null, connecting: false };
+      }
+
+      if (!isMounted) return;
+
+      // bounded exponential backoff with jitter
+      const delay = backoffDelay(attempt++);
+      setTimeout(() => connectWebSocket(channel, isMounted, attempt), delay);
     };
   }
 
