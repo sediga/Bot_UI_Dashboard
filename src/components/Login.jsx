@@ -51,6 +51,8 @@ const Login = () => {
   }, [user]);
 
   useEffect(() => {
+    localStorage.removeItem("logout_reason");
+    
     const reason = localStorage.getItem("logout_reason");
     if ((reason || "").startsWith("inactivity")) {
       alert("You've been logged out due to inactivity. All unsaved changes were discarded.");

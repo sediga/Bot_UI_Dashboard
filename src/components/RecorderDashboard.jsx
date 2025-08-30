@@ -130,13 +130,6 @@ export default function RecorderDashboard() {
     return next;
   }
 
-  const MAX_BACKOFF_MS = 30000;
-  function backoffDelay(attempt) {
-    const base = Math.min(MAX_BACKOFF_MS, Math.pow(2, Math.min(attempt, 6)) * 1000);
-    const jitter = Math.floor(Math.random() * 500);
-    return base + jitter; // 1s,2s,4s,8s,16s,32s (capped) + jitter
-  }
-
   function startHeartbeat(channel) {
     const entry = socketRef.current[channel];
     if (!entry) return;
@@ -202,7 +195,7 @@ export default function RecorderDashboard() {
     }));
   }
 
-  function connectWebSocket(channel, isMounted, attempt = 1) {
+  function connectWebSocket(channel, isMounted) {
     if (!userId || !isMounted) return;
 
     // prevent parallel connects
@@ -217,12 +210,7 @@ export default function RecorderDashboard() {
       socketRef.current[channel].ws = ws;
       socketRef.current[channel].connecting = false;
       startHeartbeat(channel);
-      attempt = 1; // reset backoff
-      // Optionally send a small handshake for your server
-      try { ws.send(JSON.stringify({ type: "ready", sessionId: userId })); } catch {}
-      // resolve any pending ensureWebSocket waiters
-      socketRef.current[channel].resolver && socketRef.current[channel].resolver(ws);
-      socketRef.current[channel].resolver = null;
+      console.log(`WebSocket connected: ${channel}`);
     };
 
     ws.onmessage = (event) => {
@@ -255,11 +243,22 @@ export default function RecorderDashboard() {
 
       if (!isMounted) return;
 
-      // bounded exponential backoff with jitter
-      const delay = backoffDelay(attempt++);
-      setTimeout(() => connectWebSocket(channel, isMounted, attempt), delay);
+      connectWebSocket(channel, isMounted);
     };
   }
+
+  // Example of handling user logout/session timeout
+  useEffect(() => {
+    if (!userId) return;  // Only connect WebSocket if the user is logged in
+
+    // Clean up WebSocket connections when the user logs out or the session expires
+    return () => {
+      Object.values(socketRef.current).forEach((ws) => {
+        ws?.close?.();  // Explicitly close all WebSocket connections
+        console.log("Closed WebSocket on logout/session timeout");
+      });
+    };
+  }, [userId]);  // Trigger cleanup when userId changes (i.e., on logout)
 
   useEffect(() => {
     activeTabRef.current = activeTab;
