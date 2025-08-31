@@ -70,9 +70,9 @@ export default function StepBuilder({
     return `${action.charAt(0).toUpperCase() + action.slice(1)}: ${text.trim()}`;
   }
 
-  useEffect(() => {
-    console.log("📌 currentLoopId in StepBuilder:", currentLoopId);
-  }, [currentLoopId]);
+  // useEffect(() => {
+  //   console.log("📌 currentLoopId in StepBuilder:", currentLoopId);
+  // }, [currentLoopId]);
 
   // useEffect(() => {
   //   const fetchFlows = async () => {
