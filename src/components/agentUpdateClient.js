@@ -42,9 +42,9 @@ export async function applyUpdate(baseUrl) {
 export async function pingStatus(baseUrl) {
   const { signal, cleanup } = withTimeout(1500);
   try {
-    const r = await safeFetch(`${baseUrl}/api/status`, { signal });
-    if (!r || !r.ok) return null;
-    return await r.json(); // expect { version: "x.y.z", ... }
+    const res = await fetch(`${baseUrl}/api/status`, { signal });
+    if (!res || !res.ok) return null;
+    return await res.json(); // expect { version: "x.y.z", ... }
   } finally {
     cleanup();
   }
