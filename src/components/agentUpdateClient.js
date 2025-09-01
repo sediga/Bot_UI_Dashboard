@@ -40,12 +40,10 @@ export async function applyUpdate(baseUrl) {
 }
 
 export async function pingStatus(baseUrl) {
-  const { signal, cleanup } = withTimeout(1500);
   try {
     const res = await fetch(`${baseUrl}/api/status`, { method: 'GET' });
     if (!res || !res.ok) return null;
     return await res.json(); // expect { version: "x.y.z", ... }
   } finally {
-    cleanup();
   }
 }
