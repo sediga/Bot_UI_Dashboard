@@ -41,14 +41,8 @@ export async function applyUpdate(baseUrl) {
 
 export async function pingStatus(baseUrl) {
   const { signal, cleanup } = withTimeout(1500);
-  const token = localStorage.getItem("botflows_token");
   try {
-    const r = await safeFetch(`${baseUrl}/api/status`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      signal
-    });
+    const r = await safeFetch(`${baseUrl}/api/status`, { signal });
     if (!r || !r.ok) return null;
     return await r.json(); // expect { version: "x.y.z", ... }
   } finally {
