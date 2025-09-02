@@ -3,14 +3,14 @@ import { applyUpdate, getUpdateStatus, pingStatus } from './agentUpdateClient';
 import config from "../config";
 
 export default function AgentUpdateBanner({
-  status,          // null if agent unreachable; else { needsUpdate, currentVersion, availableVersion }
-  onHide,          // () => void   - to remove banner
-  refreshStatus,   // () => Promise<void> - refetch /api/update/status in parent
+  status,
+  onHide,
+  refreshStatus,
 }) {
   const initial = !status ? 'agent_offline' : (status.needsUpdate ? 'available' : 'done');
   const [phase, setPhase] = React.useState(initial);
   const [msg, setMsg] = React.useState('');
-  const [isUpdating, setIsUpdating] = React.useState(false); // Track update progress
+  const [isUpdating, setIsUpdating] = React.useState(false);
 
   React.useEffect(() => {
     if (!status) setPhase('agent_offline');
@@ -18,11 +18,26 @@ export default function AgentUpdateBanner({
     else setPhase('done');
   }, [status]);
 
+  // NEW: small helpers to broadcast upgrade state to CreatePanel
+  const fireUpgradeStart = React.useCallback(() => {
+    try { localStorage.setItem('flowtra_upgrading', '1'); } catch {}
+    try { window.dispatchEvent(new CustomEvent('flowtra:upgrade-start')); } catch {}
+    try { if (window.top && window.top !== window)
+            window.top.dispatchEvent(new CustomEvent('flowtra:upgrade-start')); } catch {}
+  }, []);
+
+  const fireUpgradeDone = React.useCallback(() => {
+    try { localStorage.removeItem('flowtra_upgrading'); } catch {}
+    try { window.dispatchEvent(new CustomEvent('flowtra:upgrade-done')); } catch {}
+    try { if (window.top && window.top !== window)
+            window.top.dispatchEvent(new CustomEvent('flowtra:upgrade-done')); } catch {}
+  }, []);
+
   const onApply = async () => {
-    setPhase('downloading'); // Set phase to downloading
+    setIsUpdating(true);
+    setPhase('downloading');
     setMsg('Downloading update...');
 
-    // Step 1: Call the backend to download the update first
     const downloadRes = await fetch(`${config.agentServerUrl}/api/update/download`, {
       method: "POST",
       headers: {
@@ -37,14 +52,16 @@ export default function AgentUpdateBanner({
       setPhase('error');
       setMsg('Failed to download the update installer.');
       setIsUpdating(false);
+      // If we failed, clear any “upgrading” state just in case
+      fireUpgradeDone();
       return;
     }
 
-    console.log(`Installer downloaded to: ${downloadData.path}`);
-    setPhase('applying');  // Move to applying phase
+    // Move to applying; tell CreatePanel to pause auto-start/disable buttons
+    setPhase('applying');
     setMsg('Applying update... the agent will close for a moment.');
+    fireUpgradeStart(); // <-- NEW: signal upgrade start right before we apply
 
-    // Step 2: Once download is successful, apply the update
     try {
       const applyRes = await fetch(`${config.agentServerUrl}/api/update/apply`, {
         method: "POST",
@@ -60,17 +77,18 @@ export default function AgentUpdateBanner({
         setPhase('error');
         setMsg(`Failed to apply update: ${applyData.reason || 'Unknown error'}`);
         setIsUpdating(false);
+        fireUpgradeDone(); // unblock UI if apply fails
         return;
       }
 
-      // Step 3: Wait for the agent to restart and check the status
-      setMsg('Waiting for agent to restart...');
+      setMsg('Upgrade in progress... Waiting for agent to restart.');
       waitForAgentBack();
     } catch (err) {
       console.error("Error during update application:", err);
       setPhase('error');
       setMsg('An error occurred while applying the update.');
       setIsUpdating(false);
+      fireUpgradeDone(); // unblock UI on exception
     }
   };
 
@@ -79,54 +97,62 @@ export default function AgentUpdateBanner({
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
     let agentStopped = false;
-    // Check if the agent stopped before expecting it to restart
+    // Wait for stop first (agent exits during update)
     while (Date.now() < deadline && !agentStopped) {
-      try{
+      try {
         const info = await getUpdateStatus(config.agentServerUrl);
         if (info && info.version !== status?.currentVersion) {
           agentStopped = false;
         }
-      }catch (error) {
+      } catch (error) {
         agentStopped = true;
       }
-      await sleep(1000); // Sleep for 1 second before checking again
+      await sleep(1000);
     }
 
     if (!agentStopped) {
       setPhase('error');
       setMsg('Agent did not stop as expected. Please start it manually.');
+      setIsUpdating(false);
+      fireUpgradeDone(); // unblock UI on anomaly
       return;
     }
 
-    // Now ensure the agent is fully restarted and verify the version
+    // Now wait for agent to come back and verify version
     let agentStarted = false;
     let agentUpdated = false;
     while (Date.now() < deadline && !agentStarted) {
-      try{
+      try {
         const info = await getUpdateStatus(config.agentServerUrl);
         if (info) {
           agentStarted = true;
           setMsg("Agent started successfully.");
-          if(info.currentVersion && info.currentVersion === status.availableVersion){
+          if (info.currentVersion && info.currentVersion === status.availableVersion) {
             setMsg(`Updated to v${info.version}.`);
             setPhase('done');
             agentUpdated = true;
           }
           await refreshStatus();
-          setTimeout(onHide, 1200); // Auto-hide after a short delay
+          setIsUpdating(false);
+          fireUpgradeDone();       // <-- NEW: signal upgrade done on success
+          setTimeout(onHide, 1200);
           return;
+        }
+      } catch (error) {
+        agentStarted = false;
       }
-    } catch (error) {
-      agentStarted = false;
+      await sleep(1000);
     }
-      await sleep(1000); // Sleep before trying again
-    }
-    if (!agentStarted){
+
+    // Fallbacks
+    if (!agentStarted) {
       setPhase('error');
       setMsg('Agent did not return in time. Please start it manually.');
-    }else if (!agentUpdated) {
+    } else if (!agentUpdated) {
       setMsg('Agent did not update to the latest version. Please try again.');
     }
+    setIsUpdating(false);
+    fireUpgradeDone(); // unblock UI on timeout/mismatch
   };
 
   if (phase === 'done') return null;
@@ -142,18 +168,14 @@ export default function AgentUpdateBanner({
           <button className="underline" onClick={onHide}>Dismiss</button>
         </>
       )}
-
-      {phase === 'downloading' && <span>{msg}</span>} {/* New downloading phase */}
-
-      {phase === 'applying' && <span>{msg}</span>}  {/* Applying update phase */}
-
+      {phase === 'downloading' && <span>{msg}</span>}
+      {phase === 'applying' && <span>{msg}</span>}
       {phase === 'waiting' && (
         <>
           <span>{msg}</span>
           <a className="underline" href="flowtra://start">Start Agent</a>
         </>
       )}
-
       {phase === 'agent_offline' && (
         <>
           <span>Flowtra Agent is not running.</span>
@@ -162,7 +184,6 @@ export default function AgentUpdateBanner({
           <button className="underline" onClick={onHide}>Dismiss</button>
         </>
       )}
-
       {phase === 'error' && (
         <>
           <span>{msg}</span>
