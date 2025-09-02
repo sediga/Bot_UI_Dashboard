@@ -1,5 +1,5 @@
 import React from 'react';
-import { applyUpdate, pingStatus } from './agentUpdateClient';
+import { applyUpdate, getUpdateStatus, pingStatus } from './agentUpdateClient';
 import config from "../config";
 
 export default function AgentUpdateBanner({
@@ -81,11 +81,15 @@ export default function AgentUpdateBanner({
     let agentStopped = false;
     // Check if the agent stopped before expecting it to restart
     while (Date.now() < deadline && !agentStopped) {
-      const info = await pingStatus(config.agentServerUrl);
-      if (info && info.version !== status?.currentVersion) {
+      try{
+        const info = await getUpdateStatus(config.agentServerUrl);
+        if (info && info.version !== status?.currentVersion) {
+          agentStopped = false;
+        }
+      }catch (error) {
         agentStopped = true;
       }
-      await sleep(2500); // Sleep for 2.5 seconds before checking again
+      await sleep(1000); // Sleep for 1 second before checking again
     }
 
     if (!agentStopped) {
@@ -96,20 +100,33 @@ export default function AgentUpdateBanner({
 
     // Now ensure the agent is fully restarted and verify the version
     let agentStarted = false;
-    while (Date.now() < deadline) {
-      const info = await pingStatus(config.agentServerUrl);
-      if (info && info.version && info.version === status.availableVersion) {
-        setMsg(`Updated to v${info.version}.`);
-        setPhase('done');
-        await refreshStatus();
-        setTimeout(onHide, 1200); // Auto-hide after a short delay
-        return;
+    let agentUpdated = false;
+    while (Date.now() < deadline && !agentStarted) {
+      try{
+        const info = await getUpdateStatus(config.agentServerUrl);
+        if (info) {
+          agentStarted = true;
+          setMsg("Agent started successfully.");
+          if(info.currentVersion && info.currentVersion === status.availableVersion){
+            setMsg(`Updated to v${info.version}.`);
+            setPhase('done');
+            agentUpdated = true;
+          }
+          await refreshStatus();
+          setTimeout(onHide, 1200); // Auto-hide after a short delay
+          return;
       }
+    } catch (error) {
+      agentStarted = false;
+    }
       await sleep(2500); // Sleep before trying again
     }
-
-    setPhase('error');
-    setMsg('Agent did not return in time. Please start it manually.');
+    if (!agentStarted){
+      setPhase('error');
+      setMsg('Agent did not return in time. Please start it manually.');
+    }else if (!agentUpdated) {
+      setMsg('Agent did not update to the latest version. Please try again.');
+    }
   };
 
   if (phase === 'done') return null;
@@ -141,7 +158,7 @@ export default function AgentUpdateBanner({
         <>
           <span>Flowtra Agent is not running.</span>
           <a className="underline" href="flowtra://start">Start Agent</a>
-          <a className="underline" href="/download/FlowtraAgentInstaller.exe">Download</a>
+          <a className="underline" href="https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/FlowtraAgentInstaller.exe">Download</a>
           <button className="underline" onClick={onHide}>Dismiss</button>
         </>
       )}
@@ -150,7 +167,7 @@ export default function AgentUpdateBanner({
         <>
           <span>{msg}</span>
           <a className="underline" href="flowtra://start">Start Agent</a>
-          <a className="underline" href="/download/FlowtraAgentInstaller.exe">Download</a>
+          <a className="underline" href="https://github.com/sediga/Bot_UI_Dashboard/releases/latest/download/FlowtraAgentInstaller.exe">Download</a>
         </>
       )}
     </div>
