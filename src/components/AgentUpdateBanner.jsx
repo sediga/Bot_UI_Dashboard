@@ -119,7 +119,7 @@ export default function AgentUpdateBanner({
     } catch (error) {
       agentStarted = false;
     }
-      await sleep(2500); // Sleep before trying again
+      await sleep(1000); // Sleep before trying again
     }
     if (!agentStarted){
       setPhase('error');
