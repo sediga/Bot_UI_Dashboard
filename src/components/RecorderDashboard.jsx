@@ -230,26 +230,17 @@ export default function RecorderDashboard() {
   function connectWebSocket(channel, isMounted) {
     if (!userId || !isMounted) return;
 
-    // prevent duplicate sockets
-    const entry0 = socketRef.current[channel] || {};
-    if (entry0.ws && entry0.ws.readyState === WebSocket.OPEN) return;
-    if (entry0.connecting) return;
-    socketRef.current[channel] = entry0;
-    entry0.connecting = true;
+    // prevent parallel connects
+    if (socketRef.current[channel]?.connecting) return;
+    socketRef.current[channel] = socketRef.current[channel] || {};
+    socketRef.current[channel].connecting = true;
 
     const url = `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`;
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
-      const entry = socketRef.current[channel] || {};
-      entry.ws = ws;
-      entry.connecting = false;
-      // resolve any waiter created by ensureWebSocket(...)
-      const resolveWaiter = entry.resolver;
-      if (typeof resolveWaiter === "function") {
-        entry.resolver = null;
-        try { resolveWaiter(ws); } catch {}
-      }
+      socketRef.current[channel].ws = ws;
+      socketRef.current[channel].connecting = false;
       startHeartbeat(channel);
       console.log(`WebSocket connected: ${channel}`);
     };
@@ -334,7 +325,7 @@ export default function RecorderDashboard() {
     let isMounted = true;
 
     channels.forEach((channel) => {
-      ensureWebSocket(channel, isMounted).catch(() => {});
+      connectWebSocket(channel, isMounted);
     });
 
     return () => {
