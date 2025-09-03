@@ -21,7 +21,8 @@ export default function CreatePanel(props) {
     setCurrentLoopId,
     leftWidth,
     leftPanelRef,
-    startResizing
+    startResizing,
+    eventBus
   } = props;
 
   // --- Platform detection (macOS) ---
@@ -338,6 +339,7 @@ export default function CreatePanel(props) {
           setLogs={setLogs}
           rawMessages={recordMessages}
           setRawMessages={setRecordMessages}
+          eventBus={eventBus}
         />
       </div>
 
@@ -355,7 +357,6 @@ export default function CreatePanel(props) {
             agentStatus={agentStatus}
             currentLoopId={currentLoopId}
             setCurrentLoopId={setCurrentLoopId}
-            logs={logs}
           />
         </div>
       </div>

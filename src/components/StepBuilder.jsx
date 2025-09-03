@@ -20,7 +20,8 @@ export default function StepBuilder({
   logs,
   setLogs,
   rawMessages,
-  setRawMessages
+  setRawMessages,
+  eventBus
 }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");
@@ -118,15 +119,13 @@ function guessSecretName(p) {
 
       messageQueueRef.current.forEach((raw) => {
         try {
-          const channel = raw._channel;
-          const payload = raw.payload || raw;
-
-          if (["log", "event"].includes(channel) && ["ping", "ready"].includes(raw.type)) return;
-
-          if (channel === "log" && raw.type === "log") {
-            setLogs(prev => [...prev, payload.message]);
-            return;
-          }
+          const channel = raw._channel || "event";
+          const payload = raw.payload ?? raw;
+          const kind = String(payload.type || raw.type || "").toLowerCase();
+                          // ignore heartbeats/noise
+          if (kind === "ping" || kind === "ready" || kind === "heartbeat") return;
+                          // StepBuilder should not process logs (parent owns logs)
+          if (channel === "log") return;
 
           if (channel === "event") {
             if (payload.type === "targetPicked") {
@@ -243,10 +242,16 @@ function guessSecretName(p) {
   }, []);
 
   useEffect(() => {
-    if (!rawMessages || rawMessages.length === 0) return;
-    messageQueueRef.current.push(...rawMessages);
-    setRawMessages([]); // still reset so dashboard can collect fresh ones
-  }, [rawMessages]);
+    if (!eventBus) return;
+    const onMsg = (e) => {
+      const { channel, raw } = e.detail || {};
+      if (!raw) return;
+      messageQueueRef.current.push({ ...raw, _channel: channel || "event" });
+    };
+    eventBus.addEventListener("flowtra:msg", onMsg);
+    return () => eventBus.removeEventListener("flowtra:msg", onMsg);
+  }, [eventBus]);
+
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;

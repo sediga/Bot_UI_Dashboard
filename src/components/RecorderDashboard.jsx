@@ -29,6 +29,7 @@ export default function RecorderDashboard() {
   const [replayMessages, setReplayMessages] = useState([]);
   const [recordMessages, setRecordMessages] = useState([]);
   const activeTabRef = useRef(activeTab);
+  const eventBusRef = useRef(new EventTarget()); // 🔹 new
 
   const [runTour, setRunTour] = useState(() => {
     return localStorage.getItem("botflows_tour_skipped") !== "true";
@@ -54,6 +55,7 @@ export default function RecorderDashboard() {
       setShowConfirm(true);        // trigger confirmation modal
     } else {
       setActiveTab(newTab);        // safe to switch directly
+      clearSteps();               // clear steps when switching tabs
     }
   };
 
@@ -195,6 +197,36 @@ export default function RecorderDashboard() {
     }));
   }
 
+  const NOISE_TYPES = new Set(["ping", "pong", "heartbeat", "ready"]);
+
+  function isNoiseEvent(raw) {
+    const t = (raw && (raw.type || raw.kind || raw.event)) || "";
+    return NOISE_TYPES.has(String(t).toLowerCase());
+  }
+
+  function isNoiseLog(raw) {
+    if (!raw) return false;
+    // object form
+    const t = (raw.type || raw.kind || raw.event || "").toLowerCase();
+    if (NOISE_TYPES.has(t)) return true;
+    // string/text form
+    const msg =
+      raw.message ?? raw.msg ?? raw.text ?? raw.payload?.message ?? raw.payload?.text;
+    if (typeof msg === "string" && /^(ping|pong|heartbeat|ready)\b/i.test(msg)) return true;
+    if (typeof raw === "string" && /^(ping|pong|heartbeat|ready)\b/i.test(raw)) return true;
+    return false;
+  }
+
+  function normalizeLog(raw) {
+    if (raw == null) return "";
+    if (typeof raw === "string") return raw;
+    if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+    const msg =
+      raw.message ?? raw.msg ?? raw.text ?? raw.payload?.message ?? raw.payload?.text;
+    if (msg) return String(msg);
+    try { return JSON.stringify(raw); } catch { return "[object]"; }
+  }
+
   function connectWebSocket(channel, isMounted) {
     if (!userId || !isMounted) return;
 
@@ -219,12 +251,27 @@ export default function RecorderDashboard() {
       entry.lastSeen = Date.now();
       try {
         const raw = JSON.parse(event.data);
-        if (activeTabRef.current === "replay") {
-          setReplayMessages(prev => [...prev, { ...raw, _channel: channel }]);
-        } else if (activeTabRef.current === "create") {
-          setRecordMessages(prev => [...prev, { ...raw, _channel: channel }]);
-        }
-      } catch (e) {
+         if (channel === "event") {
+           // Always broadcast events on the bus (lossless for StepBuilder)
+           eventBusRef.current.dispatchEvent(
+             new CustomEvent("flowtra:msg", { detail: { channel, raw } })
+           );
+           // Feed ReplayPanel when on the replay tab
+           if (activeTabRef.current === "replay") {
+             setReplayMessages(prev => [...prev, { ...raw, _channel: channel }]);
+           }
+           // Note: we intentionally do NOT push event messages into recordMessages
+           // to avoid races; StepBuilder should consume the bus instead.
+         } else if (channel === "log") {
+          if (isNoiseLog(raw)) return;
+          const line = `[${new Date().toLocaleTimeString()}] ${normalizeLog(raw)}`;
+          const MAX_LOGS = 2000;
+          setLogs(prev => {
+            const next = (prev || []).concat(line);
+            return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
+          });
+         }
+              } catch (e) {
         console.error(`Failed to parse WS (${channel})`, e);
       }
     };
@@ -397,6 +444,7 @@ export default function RecorderDashboard() {
             leftWidth={leftWidth}
             leftPanelRef={leftPanelRef}
             startResizing={startResizing}
+            eventBus={eventBusRef.current}
           />
         )}
 
