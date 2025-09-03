@@ -113,11 +113,13 @@ function guessSecretName(p) {
 }
   useEffect(() => {
     const interval = setInterval(() => {
-      if (messageQueueRef.current.length === 0) return;
-
-      const newSteps = [];
-
-      messageQueueRef.current.forEach((raw) => {
+    const batch = messageQueueRef.current;
+    if (batch.length === 0) return;
+    // swap buffers so new arrivals are not lost
+    messageQueueRef.current = [];
+ 
+    const newSteps = [];
+    batch.forEach((raw) => {
         try {
           const channel = raw._channel || "event";
           const payload = raw.payload ?? raw;
@@ -235,7 +237,6 @@ function guessSecretName(p) {
         setSteps(prev => [...prev, ...newSteps]);
       }
 
-      messageQueueRef.current = [];
     }, 100); // Adjust interval if needed
 
     return () => clearInterval(interval);
