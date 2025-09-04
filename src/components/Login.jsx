@@ -89,56 +89,41 @@ const Login = () => {
   };
 
   return (
-    <div className="bg-white min-h-screen w-full">
+    // 2 rows: header, then a big section that includes content + footer
+    <div className="min-h-screen w-full grid grid-rows-[auto,1fr] bg-white">
+      <TopBanner /> {/* header */}  {/* :contentReference[oaicite:1]{index=1} */}
+
+      {/* Wave background now wraps content AND footer */}
       <SectionWithBackground>
-        <div className="h-screen flex flex-col">
-          <TopBanner />
-          <div className="flex-1 flex items-center justify-center px-4">
-            <form
-              onSubmit={handleLogin}
-              className="p-6 rounded-lg   w-full max-w-md"
-            >
+        {/* Inside the wave: 2 rows -> form (fills) + footer (auto) */}
+        <div className="min-h-full grid grid-rows-[1fr,auto]">
+          <div className="min-h-0 flex items-center justify-center px-4 py-36 overflow-auto">
+            <form onSubmit={handleLogin} className="p-6 rounded-lg w-full max-w-md backdrop-blur">
               <h2 className="text-2xl font-semibold mb-4">Login</h2>
               {error && <p className="text-red-500 mb-2">{error}</p>}
-              <input
-                type="email"
-                placeholder="Email"
-                className="w-full mb-3 p-2 border rounded"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <input  
-                type="password"
-                placeholder="Password"
-                className="w-full mb-4 p-2 border rounded"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              <button
-                type="submit"
-                className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
-              >
+              <input type="email" placeholder="Email" className="w-full mb-3 p-2 border rounded"
+                     value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <input type="password" placeholder="Password" className="w-full mb-4 p-2 border rounded"
+                     value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
                 Log In
               </button>
               <p className="text-sm mt-4">
-                Don't have an account?{" "}
-                <Link className="text-blue-600" to="/signup">
-                  Sign up
-                </Link>
+                Don&apos;t have an account?{" "}
+                <Link className="text-blue-600 hover:underline" to="/signup">Sign up</Link>
               </p>
               <div className="mt-4 flex justify-center">
-                <GoogleLogin
-                  onSuccess={handleGoogleLoginSuccess}
-                  onError={() => console.error("Google login error")}
-                />
+                <GoogleLogin onSuccess={handleGoogleLoginSuccess}
+                             onError={() => console.error("Google login error")} />
               </div>
             </form>
           </div>
-        <Footer  className="text-gray-500 text-sm py-6 pb-10 border-t-4 mt-10"/>
+
         </div>
       </SectionWithBackground>
+      <div className="[&>footer]:mt-0">
+        <Footer />
+      </div>
     </div>
   );
 };
