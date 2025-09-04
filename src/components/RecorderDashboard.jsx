@@ -128,14 +128,14 @@ export default function RecorderDashboard() {
   const MAX_RETRIES = 5;
   const RETRY_DELAY = 3000; // ms
   const socketRef = useRef({});
-  const CONNECT_LOCKS = {};
-
-  function withConnectLock(channel, fn) {
-    const prev = CONNECT_LOCKS[channel] || Promise.resolve();
-    const next = prev.then(() => fn());
-    CONNECT_LOCKS[channel] = next.catch(() => {}); // keep chain alive
-    return next;
-  }
+  const wantOpenRef = useRef({});   // { [channel]: boolean }
+  const recvSeqRef = useRef(0);
+  // function withConnectLock(channel, fn) {
+  //   const prev = CONNECT_LOCKS[channel] || Promise.resolve();
+  //   const next = prev.then(() => fn());
+  //   CONNECT_LOCKS[channel] = next.catch(() => {}); // keep chain alive
+  //   return next;
+  // }
 
   function startHeartbeat(channel) {
     const entry = socketRef.current[channel];
@@ -170,38 +170,15 @@ export default function RecorderDashboard() {
     entry.timers = {};
   }
 
+  // Idempotent: ensure a socket exists and is connected; no promises, no locks.
   function ensureWebSocket(channel) {
-    return withConnectLock(channel, () => new Promise((resolve, reject) => {
-      const entry = socketRef.current[channel];
-      if (entry?.ws && entry.ws.readyState === WebSocket.OPEN) {
-        return resolve(entry.ws);
-      }
-      // set a one-shot resolver to be called on onopen
-      socketRef.current[channel] = entry || {};
-      // store a resolver that clears the safety timeout when called
-      let settled = false;
-      const resolver = (ws) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(to);
-        try { resolve(ws); } catch {}
-      };
-      socketRef.current[channel].resolver = resolver;
-
-      // kick off connect if not already connecting
-      if (!entry?.connecting) {
-        connectWebSocket(channel);
-      }
-
-      // safety timeout
-      const to = setTimeout(() => {
-        if (socketRef.current[channel]?.resolver === resolver) {
-          socketRef.current[channel].resolver = null;
-        }
-        reject(new Error(`WebSocket connection timeout: ${channel}`));
-      }, 8000);
-
-    }));
+    wantOpenRef.current[channel] = true; // we want this channel up
+    const entry = socketRef.current[channel];
+    const rs = entry?.ws?.readyState;
+    // if OPEN or CONNECTING (0=CONNECTING, 1=OPEN), don’t start another
+    if (rs === WebSocket.OPEN || rs === WebSocket.CONNECTING) return;
+    if (entry?.connecting) return; // already dialing
+    connectWebSocket(channel);
   }
 
   const NOISE_TYPES = new Set(["ping", "pong", "heartbeat", "ready"]);
@@ -238,32 +215,40 @@ export default function RecorderDashboard() {
     if (!userId) return;
 
     // prevent parallel connects
-    if (socketRef.current[channel]?.connecting) return;
-    socketRef.current[channel] = socketRef.current[channel] || {};
-    socketRef.current[channel].connecting = true;
+    // if caller doesn’t currently want this channel, don’t connect
+    if (!wantOpenRef.current[channel]) return;
+    const cur = socketRef.current[channel] || {};
+    if (cur.connecting) return; // already dialing
+    const rs = cur.ws?.readyState;
+    if (rs === WebSocket.OPEN || rs === WebSocket.CONNECTING) return;
+    // mark connecting and bump generation
+    const gen = (cur.gen || 0) + 1;
+    socketRef.current[channel] = { ...cur, connecting: true, gen };
 
     const url = `${config.apiBaseUrl.replace("http", "ws")}/ws/connect?type=dashboard-${channel}&sessionId=${userId}`;
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
-      socketRef.current[channel].ws = ws;
-      socketRef.current[channel].connecting = false;
+      const e = socketRef.current[channel];
+      if (!e || e.gen !== gen) { try { ws.close(); } catch {} return; } // stale
+      e.ws = ws;
+      e.connecting = false;
       startHeartbeat(channel);
       console.log(`WebSocket connected: ${channel}`);
-      // fulfill any waiter from ensureWebSocket()
-      const r = socketRef.current[channel].resolver;
-      if (typeof r === "function") {
-        socketRef.current[channel].resolver = null;
-        try { r(ws); } catch {}
-      }
     };
 
     ws.onmessage = (event) => {
       const entry = socketRef.current[channel];
-      if (!entry) return;
+      if (!entry || entry.gen !== gen) return; // ignore stale socket
       entry.lastSeen = Date.now();
       try {
-        const raw = JSON.parse(event.data);
+        // tolerant parsing: events must be JSON; logs may be plain text
+        let raw;
+        try { raw = JSON.parse(event.data); }
+        catch { raw = (channel === "log") ? String(event.data) : null; }
+        if (!raw) return;
+        if (typeof raw === "object") raw._recv = ++recvSeqRef.current; // stable tiebreaker
+         // Idempotent: ensure a socket exists and is connected; no promises, no locks.
          if (channel === "event") {
           if (isNoiseEvent(raw) && !raw.action && !raw.eventId) return;
            // Always broadcast events on the bus (lossless for StepBuilder)
@@ -296,28 +281,48 @@ export default function RecorderDashboard() {
     };
 
     ws.onclose = (ev) => {
-      const entry = socketRef.current[channel];
-      if (entry?.ws === ws) {
+      const e = socketRef.current[channel];
+      if (e && e.gen === gen) {
         clearHeartbeat(channel);
-        socketRef.current[channel] = { ...entry, ws: null, connecting: false };
+        // clear this socket; preserve gen to guard stale reconnects
+        socketRef.current[channel] = { ...e, ws: null, connecting: false };
+      } else {
+        // stale; nothing to do
+        return;
       }
-
-      if (!aliveRef.current) return;
-      // jittered reconnect to avoid thundering herd
+      // only reconnect if caller *still* wants this channel and component is alive
+      if (!aliveRef.current || !wantOpenRef.current[channel]) return;
+      // jittered reconnect; de-dupe existing timer
+      if (e?.reconnectTimer) clearTimeout(e.reconnectTimer);
       const delay = 400 + Math.random() * 800;
-      setTimeout(() => aliveRef.current && connectWebSocket(channel), delay);
-    };
-  }
+      const t = setTimeout(() => {
+        const cur = socketRef.current[channel];
+        if (!aliveRef.current || !wantOpenRef.current[channel]) return;
+        // avoid overlapping dials
+        if (cur?.connecting) return;
+        connectWebSocket(channel);
+      }, delay);
+      socketRef.current[channel] = { ...(socketRef.current[channel] || {}), reconnectTimer: t };
+  };
+}
 
   // Example of handling user logout/session timeout
   useEffect(() => {
     if (!userId) return;  // Only connect WebSocket if the user is logged in
 
+    const channels = ["event", "log"];
+ 
+     channels.forEach((channel) => {
+       ensureWebSocket(channel);
+     });
+
     // Clean up WebSocket connections when the user logs out or the session expires
     return () => {
+      // caller no longer wants channels; stop reconnect loops first
+      channels.forEach((ch) => { wantOpenRef.current[ch] = false; });
       Object.values(socketRef.current).forEach((entry) => {
-        entry.ws?.close?.();  // Explicitly close all WebSocket connections
-        console.log("Closed WebSocket on logout/session timeout");
+        if (entry?.reconnectTimer) clearTimeout(entry.reconnectTimer);
+        entry?.ws?.close?.();
       });
     };
   }, [userId]);  // Trigger cleanup when userId changes (i.e., on logout)
@@ -332,20 +337,6 @@ export default function RecorderDashboard() {
       setLogs([]);
     }
   }, [activeTab]);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const channels = ["event", "log"];
-
-    channels.forEach((channel) => {
-      ensureWebSocket(channel);
-    });
-
-    return () => {
-      Object.values(socketRef.current).forEach((entry) => entry.ws?.close?.());
-    };
-  }, [userId]);
 
   useEffect(() => {
     const checkAgentStatus = async () => {
