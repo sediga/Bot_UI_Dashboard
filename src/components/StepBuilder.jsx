@@ -44,6 +44,9 @@ export default function StepBuilder({
   const userId = user?.userId;
   const messageQueueRef = useRef([]);
   const currentLoopIdRef = useRef(currentLoopId);
+  const seenEventIdsRef = useRef(new Set());           // strong dedupe
+  const seenSigRef = useRef(new Map());                // fallback dedupe (LRU-ish)
+  const SEEN_LIMIT = 10000;                            // cap memory usage
   
   
   const seenSecretIdsRef = useRef(new Set());
@@ -71,68 +74,71 @@ export default function StepBuilder({
     return `${action.charAt(0).toUpperCase() + action.slice(1)}: ${text.trim()}`;
   }
 
-  // useEffect(() => {
-  //   console.log("📌 currentLoopId in StepBuilder:", currentLoopId);
-  // }, [currentLoopId]);
-
-  // useEffect(() => {
-  //   const fetchFlows = async () => {
-  //     try {
-  //       const headers = {
-  //         Authorization: `Bearer ${token}`,
-  //         "Content-Type": "application/json",
-  //         "x-api-key": config.apiKey
-  //       };
-
-  //       const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, { headers });
-  //       if (!res.ok) {
-  //         console.warn("Fetch failed:", res.status);
-  //         return;
-  //       }
-
-  //       const data = await res.json();
-  //       if (Array.isArray(data)) {
-  //         setAvailableFlows(data);
-  //       } else {
-  //         console.warn("Unexpected data format:", data);
-  //       }
-  //     } catch (err) {
-  //       console.error("Failed to fetch flow list", err);
-  //     }
-  //   };
-
-  //   fetchFlows();
-  // }, [token]);
-
-  // console.log("🔄 render", rawMessages);
 function guessSecretName(p) {
   const a = p.attributes || {};
   const c = [a.name, a.id, a["aria-label"], a.placeholder, p.innerText, p.elementText].filter(Boolean);
   const raw = (c[0] || "secret").toLowerCase();
   return raw.replace(/[^a-z0-9]+/gi,"_").replace(/^_+|_+$/g,"").slice(0,40) || "secret";
 }
-  useEffect(() => {
-    const interval = setInterval(() => {
+
+useEffect(() => {
+  const interval = setInterval(() => {
     const batch = messageQueueRef.current;
     if (batch.length === 0) return;
-    // swap buffers so new arrivals are not lost
+    // swap buffers so new arrivals are not lost while we process
     messageQueueRef.current = [];
- 
+    // stable ordering within this batch
+    batch.sort((a, b) => {
+      const ta = (a.payload?.timestamp ?? a.timestamp ?? 0);
+      const tb = (b.payload?.timestamp ?? b.timestamp ?? 0);
+      return ta - tb;
+    });
     const newSteps = [];
     batch.forEach((raw) => {
         try {
           const channel = raw._channel || "event";
           const payload = raw.payload ?? raw;
           const kind = String(payload.type || raw.type || "").toLowerCase();
-                          // ignore heartbeats/noise
+          // ignore heartbeats/noise
           if (kind === "ping" || kind === "ready" || kind === "heartbeat") return;
-                          // StepBuilder should not process logs (parent owns logs)
-          if (channel === "log") return;
+          // StepBuilder processes only events; logs are handled by parent
+          if (channel !== "event") return;
 
           if (channel === "event") {
             if (payload.type === "targetPicked") {
               setPickedTarget(payload);
               return;
+            }
+
+           const evId = payload.eventId;
+            if (evId) {
+              if (seenEventIdsRef.current.has(evId)) return;
+              seenEventIdsRef.current.add(evId);
+              // prune occasionally
+              if (seenEventIdsRef.current.size > SEEN_LIMIT) {
+                // cheap reset: keep only the last half by recreating
+                const keep = Array.from(seenEventIdsRef.current).slice(-SEEN_LIMIT/2);
+                seenEventIdsRef.current = new Set(keep);
+              }
+            } else {
+              // --------- fallback dedupe by signature ----------
+              const sigBase = [
+                payload.type,
+                payload.action,
+                payload.selector || payload.improvedSelector || payload.devToolsSelector || "",
+                Math.floor((payload.timestamp ?? Date.now()) / 250) // 250ms buckets
+              ].join("|");
+              const already = seenSigRef.current.get(sigBase);
+              if (already) return;
+              seenSigRef.current.set(sigBase, 1);
+              if (seenSigRef.current.size > SEEN_LIMIT) {
+                // drop oldest ~1/2 by recreating map
+                const half = Math.floor(SEEN_LIMIT / 2);
+                const lastHalf = Array.from(seenSigRef.current.keys()).slice(-half);
+                const next = new Map();
+                lastHalf.forEach(k => next.set(k, 1));
+                seenSigRef.current = next;
+              }
             }
 
             const isSmartColumnClick = payload.type === "clickInColumn";
@@ -247,6 +253,8 @@ function guessSecretName(p) {
     const onMsg = (e) => {
       const { channel, raw } = e.detail || {};
       if (!raw) return;
+      // Quick guard to keep only event/log shapes we understand
+      // Note: logs are ignored by StepBuilder; RecorderDashboard owns them.
       messageQueueRef.current.push({ ...raw, _channel: channel || "event" });
     };
     eventBus.addEventListener("flowtra:msg", onMsg);
@@ -256,8 +264,8 @@ function guessSecretName(p) {
 
   const handleNavigate = async () => {
     if (!urlInput.trim()) return;
-    await onEnsureWebSocket("event", isMounted);
-    await onEnsureWebSocket("log", isMounted);
+    await onEnsureWebSocket("event");
+    await onEnsureWebSocket("log");
 
     const url = urlInput.trim();
     const formattedUrl = /^https?:\/\//i.test(url) ? url : `http://${url}`;
@@ -315,6 +323,7 @@ function guessSecretName(p) {
     };
 
     addStep(loopStep);
+    setCurrentLoopId(id);
     setLoopName("");
   };
 
@@ -356,8 +365,8 @@ function guessSecretName(p) {
   const handlePreviewReplay = async () => {
     try {
       const authType = config.authType || "jwt";
-      await onEnsureWebSocket("event", isMounted);
-      await onEnsureWebSocket("log", isMounted);
+      await onEnsureWebSocket("event");
+      await onEnsureWebSocket("log");
 
       const headers = {
         "Content-Type": "application/json",
@@ -422,26 +431,6 @@ const loadFlow = async (selectedFlow) => {
       alert("Could not load flow");
     }
   };
-
-  // const fetchStatus = async () => {
-  //   try {
-  //     const res = await fetch(`${config.agentServerUrl}/api/status`);
-  //     const data = await res.json();
-  //     if (data.recording) setStatus("recording");
-  //     else if (data.replaying) setStatus("replaying");
-  //     else if (data.running) setStatus("idle");
-  //     else setStatus("stopped");
-  //   } catch {
-  //     setStatus("unknown");
-  //   }
-  // };
-
-
-  // useEffect(() => {
-  //   fetchStatus();
-  //   const interval = setInterval(fetchStatus, 5000);
-  //   return () => clearInterval(interval);
-  // }, []);
 
   return (
     <section className="flex-1 bg-gray-50 p-4 h-full min-h-0 flex flex-col">

@@ -35,6 +35,11 @@ export default function RecorderDashboard() {
     return localStorage.getItem("botflows_tour_skipped") !== "true";
   });
 
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
 
   const stopRecording = async () => {
     try {
@@ -127,7 +132,7 @@ export default function RecorderDashboard() {
 
   function withConnectLock(channel, fn) {
     const prev = CONNECT_LOCKS[channel] || Promise.resolve();
-    const next = prev.finally(fn);
+    const next = prev.then(() => fn());
     CONNECT_LOCKS[channel] = next.catch(() => {}); // keep chain alive
     return next;
   }
@@ -165,7 +170,7 @@ export default function RecorderDashboard() {
     entry.timers = {};
   }
 
-  function ensureWebSocket(channel, isMounted) {
+  function ensureWebSocket(channel) {
     return withConnectLock(channel, () => new Promise((resolve, reject) => {
       const entry = socketRef.current[channel];
       if (entry?.ws && entry.ws.readyState === WebSocket.OPEN) {
@@ -173,27 +178,29 @@ export default function RecorderDashboard() {
       }
       // set a one-shot resolver to be called on onopen
       socketRef.current[channel] = entry || {};
-      socketRef.current[channel].resolver = resolve;
+      // store a resolver that clears the safety timeout when called
+      let settled = false;
+      const resolver = (ws) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(to);
+        try { resolve(ws); } catch {}
+      };
+      socketRef.current[channel].resolver = resolver;
 
       // kick off connect if not already connecting
       if (!entry?.connecting) {
-        connectWebSocket(channel, isMounted, 1);
+        connectWebSocket(channel);
       }
 
       // safety timeout
       const to = setTimeout(() => {
-        if (socketRef.current[channel]?.resolver === resolve) {
+        if (socketRef.current[channel]?.resolver === resolver) {
           socketRef.current[channel].resolver = null;
         }
         reject(new Error(`WebSocket connection timeout: ${channel}`));
       }, 8000);
 
-      // wrap resolve to clear timeout
-      const origResolve = resolve;
-      socketRef.current[channel].resolver = (ws) => {
-        clearTimeout(to);
-        origResolve(ws);
-      };
     }));
   }
 
@@ -227,8 +234,8 @@ export default function RecorderDashboard() {
     try { return JSON.stringify(raw); } catch { return "[object]"; }
   }
 
-  function connectWebSocket(channel, isMounted) {
-    if (!userId || !isMounted) return;
+  function connectWebSocket(channel) {
+    if (!userId) return;
 
     // prevent parallel connects
     if (socketRef.current[channel]?.connecting) return;
@@ -243,15 +250,22 @@ export default function RecorderDashboard() {
       socketRef.current[channel].connecting = false;
       startHeartbeat(channel);
       console.log(`WebSocket connected: ${channel}`);
+      // fulfill any waiter from ensureWebSocket()
+      const r = socketRef.current[channel].resolver;
+      if (typeof r === "function") {
+        socketRef.current[channel].resolver = null;
+        try { r(ws); } catch {}
+      }
     };
 
     ws.onmessage = (event) => {
       const entry = socketRef.current[channel];
-      if (!isMounted || !entry) return;
+      if (!entry) return;
       entry.lastSeen = Date.now();
       try {
         const raw = JSON.parse(event.data);
          if (channel === "event") {
+          if (isNoiseEvent(raw) && !raw.action && !raw.eventId) return;
            // Always broadcast events on the bus (lossless for StepBuilder)
            eventBusRef.current.dispatchEvent(
              new CustomEvent("flowtra:msg", { detail: { channel, raw } })
@@ -288,9 +302,10 @@ export default function RecorderDashboard() {
         socketRef.current[channel] = { ...entry, ws: null, connecting: false };
       }
 
-      if (!isMounted) return;
-
-      connectWebSocket(channel, isMounted);
+      if (!aliveRef.current) return;
+      // jittered reconnect to avoid thundering herd
+      const delay = 400 + Math.random() * 800;
+      setTimeout(() => aliveRef.current && connectWebSocket(channel), delay);
     };
   }
 
@@ -300,8 +315,8 @@ export default function RecorderDashboard() {
 
     // Clean up WebSocket connections when the user logs out or the session expires
     return () => {
-      Object.values(socketRef.current).forEach((ws) => {
-        ws?.close?.();  // Explicitly close all WebSocket connections
+      Object.values(socketRef.current).forEach((entry) => {
+        entry.ws?.close?.();  // Explicitly close all WebSocket connections
         console.log("Closed WebSocket on logout/session timeout");
       });
     };
@@ -322,15 +337,13 @@ export default function RecorderDashboard() {
     if (!userId) return;
 
     const channels = ["event", "log"];
-    let isMounted = true;
 
     channels.forEach((channel) => {
-      connectWebSocket(channel, isMounted);
+      ensureWebSocket(channel);
     });
 
     return () => {
-      isMounted = false;
-      Object.values(socketRef.current).forEach((ws) => ws?.close?.());
+      Object.values(socketRef.current).forEach((entry) => entry.ws?.close?.());
     };
   }, [userId]);
 
