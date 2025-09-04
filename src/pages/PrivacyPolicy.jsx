@@ -51,8 +51,11 @@ const PrivacyPolicy = () => (
             </p>
           </div>
         </div>
-        <Footer  className="text-gray-500 text-sm py-6 pb-10 border-t-4 mt-10"/>
       </SectionWithBackground>
+      {/* Footer row — override ONLY here to cancel its internal mt-10 */}
+      <div className="[&>footer]:mt-0">
+        <Footer />
+      </div>
     </main>
 
   </div>

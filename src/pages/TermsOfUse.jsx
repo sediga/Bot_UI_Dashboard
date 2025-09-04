@@ -3,13 +3,15 @@ import Footer from "../components/Footer";
 import SectionWithBackground from "../components/SectionWithBackground";
 
 const TermsOfUse = () => (
+  <div className="flex flex-col min-h-screen">
+    <main className="flex-grow">
   <SectionWithBackground>
     {/* <div className="flex flex-col min-h-screen text-sm text-gray-700"> */}
       {/* Header */}
 
       {/* Main content that pushes footer down */}
       <TopBanner />
-      <div className="flex-grow w-full px-6 py-20">
+      <div className="flex-grow w-full px-6 py-8">
         <div className="max-w-3xl mx-auto space-y-6">
           <h1 className="text-xl font-semibold">Terms of Use</h1>
           <p>Last updated: August 3, 2025</p>
@@ -49,11 +51,14 @@ const TermsOfUse = () => (
           </p>
         {/* </div> */}
       </div>
-
-      {/* Footer — no mt/pb/extra spacing needed */}
-      <Footer />
     </div>
   </SectionWithBackground>
+      {/* Footer row — override ONLY here to cancel its internal mt-10 */}
+      <div className="[&>footer]:mt-0">
+        <Footer />
+      </div>
+  </main>
+  </div>
 );
 
 export default TermsOfUse;
