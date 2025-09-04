@@ -98,7 +98,7 @@ const ProtectedLayout = ({ children }) => {
   return (
     <div className="h-screen flex flex-col">
       {/* Sticky Header */}
-      <header className="sticky top-0 z-50 bg-gray-800 text-white p-4 flex justify-between items-center shadow">
+      <header className="sticky top-0 z-50 bg-blue-800 text-gray p-4 flex justify-between items-center shadow">
         <div className="flex items-center space-x-4">
           <Link to="/" className="flex items-center space-x-2">
             <img src="/assets/logo.png" alt="Flowtra Logo" className="h-8" />
@@ -112,7 +112,7 @@ const ProtectedLayout = ({ children }) => {
           {email && <span className="text-sm text-white">{email}</span>}
           <button
             onClick={handleLogout}
-            className="bg-red-600 px-3 py-1 rounded hover:bg-red-700"
+            className="bg-white-600 text-white px-3 py-1 rounded hover:bg-red-700"
           >
             Logout
           </button>
