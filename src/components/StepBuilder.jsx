@@ -449,8 +449,6 @@ const loadFlow = async (selectedFlow) => {
           <button onClick={handlePreviewReplay} className="bg-purple-600 text-white px-3 py-2 rounded">Preview</button>
         </div>
 
-        <div className="text-sm text-gray-500">Status: {status}</div>
-
         <FlowSelector
           value={selectedFlow}
           onChange={(val) => {
