@@ -3,7 +3,8 @@ import Footer from "../components/Footer";
 import SectionWithBackground from "../components/SectionWithBackground";
 
 const PrivacyPolicy = () => (
-  <div className="flex flex-col min-h-screen">
+<div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>  
+    <div className="flex flex-col ">
 
     <main className="flex-grow">
       <SectionWithBackground>
@@ -59,6 +60,7 @@ const PrivacyPolicy = () => (
     </main>
 
   </div>
+</div>
 );
 
 export default PrivacyPolicy;

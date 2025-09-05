@@ -89,8 +89,8 @@ const Login = () => {
   };
 
   return (
-    // 2 rows: header, then a big section that includes content + footer
-    <div className="min-h-screen w-full grid grid-rows-[auto,1fr] bg-white">
+<div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>  
+    <div className="w-full grid grid-rows-[auto,1fr] bg-white">
       <TopBanner /> {/* header */}  {/* :contentReference[oaicite:1]{index=1} */}
 
       {/* Wave background now wraps content AND footer */}
@@ -125,6 +125,7 @@ const Login = () => {
         <Footer />
       </div>
     </div>
+</div>
   );
 };
 

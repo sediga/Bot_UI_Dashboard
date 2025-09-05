@@ -136,11 +136,12 @@ export default function BetaLaunchSections() {
   ];
 
   return (
-    <div className="bg-transpharent px-24">
-      {sections.map((section, idx) => (
-        <section
-          key={idx}
-          className={`flex flex-col md:flex-row ${
+    <div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>
+      <div className="bg-transpharent px-24">
+        {sections.map((section, idx) => (
+          <section
+            key={idx}
+            className={`flex flex-col md:flex-row ${
             idx % 2 === 1 ? "md:flex-row-reverse" : ""
           } items-center px-6 md:px-16 py-12 gap-10`}
         >
@@ -212,8 +213,8 @@ export default function BetaLaunchSections() {
           </div>
         </div>
       )}
-
-
+        <ReachOutPopup isOpen={showPopup} onClose={() => setShowPopup(false)} />
+    </div>
     </div>
   );
 }

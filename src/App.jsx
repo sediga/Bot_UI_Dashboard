@@ -12,6 +12,9 @@ import FeedbackBubble from "./components/FeedbackBubble";
 import { useAuth } from "./contexts/AuthContext";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfUse from "./pages/TermsOfUse";
+import JoinDesignPartnerPage from "./pages/JoinDesignPartnerPage";
+import DesignPartnerLearnMore from "./pages/DesignPartnerLearnMore";
+import Docs from "./pages/Docs";
 
 function App() {
   const { user, login, logout } = useAuth();
@@ -33,6 +36,9 @@ function App() {
         />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfUse />} />
+        <Route path="/join-design-partner" element={<JoinDesignPartnerPage />} />
+        <Route path="/learn-more" element={<DesignPartnerLearnMore />} />
+        <Route path="/docs" element={<Docs />} />
       </Routes>
     </GoogleOAuthProvider>
 

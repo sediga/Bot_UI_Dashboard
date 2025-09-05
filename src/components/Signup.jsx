@@ -38,8 +38,9 @@ const Signup = () => {
   };
 
   return (
-    // Full-viewport grid: header (auto) / content (1fr) / footer (auto)
-    <div className="min-h-screen w-full grid grid-rows-[auto,1fr] bg-white">
+<div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>      
+
+    <div className="w-full grid grid-rows-[auto,1fr] bg-white">
       {/* Header */}
       <TopBanner />
 
@@ -100,6 +101,7 @@ const Signup = () => {
         <Footer />
       </div>
     </div>
+</div>
   );
 };
 
