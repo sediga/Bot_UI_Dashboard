@@ -479,13 +479,6 @@ export default function HelpCenterPage() {
         </div>
       </div>
 
-      {/* Floating Back-to-top + Prev/Next */}
-      <FloatingPager
-        prev={prev}
-        next={next}
-        onPrev={() => prev && scrollToId(prev.id)}
-        onNext={() => next && scrollToId(next.id)}
-      />
 
     </div>
   );

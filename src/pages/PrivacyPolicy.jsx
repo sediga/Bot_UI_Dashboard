@@ -3,7 +3,7 @@ import Footer from "../components/Footer";
 import SectionWithBackground from "../components/SectionWithBackground";
 
 const PrivacyPolicy = () => (
-<div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>  
+<div style={{ paddingTop: "var(--header-offset)" }}>  
     <div className="flex flex-col ">
 
     <main className="flex-grow">

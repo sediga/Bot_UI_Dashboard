@@ -35,7 +35,7 @@ export default function DesignPartnerLearnMore() {
   ];
 
   return (
-<div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>  
+<div style={{ paddingTop: "var(--header-offset)" }}>  
     <div className="flex flex-col ">
 
     <main className="flex-grow">
@@ -197,11 +197,11 @@ export default function DesignPartnerLearnMore() {
           </section>
         </div>
       </div>
+    </SectionWithBackground>
         {/* Footer row — override ONLY here to cancel its internal mt-10 */}    
         <div className="[&>footer]:mt-0">
             <Footer />
         </div>
-    </SectionWithBackground>
     </main>
     </div>
 </div>

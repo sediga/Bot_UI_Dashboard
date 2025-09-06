@@ -7,7 +7,7 @@ import HelpCenter from "../components/HelpCenter";
 
 export default function Docs() {
   return (
-    <div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>
+    <div style={{ paddingTop: "var(--header-offset)" }}>
       <div className="flex flex-col min-h-screen">
         <main className="flex-grow">
           <SectionWithBackground>
@@ -21,10 +21,10 @@ export default function Docs() {
               // extraSections={[{ id: "integrations", title: "Integrations", content: <div>…</div> }]}
               // faqs={[{ q: "Custom Q", a: "Custom A" }]}
             />
+          </SectionWithBackground>
             <div className="[&>footer]:mt-0">
               <Footer />
             </div>
-          </SectionWithBackground>
 
         </main>
       </div>

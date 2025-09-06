@@ -98,7 +98,7 @@ export default function JoinDesignPartnerPage() {
   if (state.ok) return <SuccessScreen />;
 
   return (
-<div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>  
+<div style={{ paddingTop: "var(--header-offset)" }}>  
     <div className="flex flex-col ">
 
     <main className="flex-grow">
@@ -251,13 +251,13 @@ function Benefit({ title, desc }) {
 
 function SuccessScreen() {
   return (
-<div style={{ paddingTop: "var(--header-offset)", paddingBottom: "var(--footer-offset)" }}>  
+<div style={{ paddingTop: "var(--header-offset)" }}>  
     <div className="flex flex-col ">
 
     <main className="flex-grow">
        <SectionWithBackground>
         <TopBanner />
-        <div className="text-center mx-auto max-w-2xl px-6 py-20 md:py-64">
+        <div className="text-center mx-auto max-w-2xl px-6 py-56 md:py-64">
             <div className="text-3xl font-semibold">Thanks for joining! 🎉</div>
             <p className="mt-3 text-slate-600">
             We received your application and will get back to you shortly with next steps.

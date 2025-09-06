@@ -25,7 +25,7 @@ function Footer() {
   return (
     <footer
       ref={ref}
-      className="fixed bottom-0 inset-x-0 z-40 bg-white/85 backdrop-blur border-t-4"
+      className="bg-white/85 backdrop-blur border-t-4"
     >
       <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between space-y-3 md:space-y-0 text-gray-500 text-sm">
         <div className="text-center">
