@@ -47,7 +47,7 @@ const Signup = () => {
       {/* Content row with wave background stretching to the footer */}
       <SectionWithBackground>
         <div className="min-h-full grid grid-rows-[1fr,auto]">
-        <div className="min-h-0 flex items-center justify-center px-4 py-40 overflow-auto">
+        <div className="min-h-0 flex items-center justify-center px-4 py-36 overflow-auto">
           <form onSubmit={handleSignup} className="p-6 rounded-lg w-full max-w-md bg-transparent">
             <h2 className="text-2xl font-semibold mb-4 text-indigo-700">Sign Up</h2>
             {error && <p className="text-red-500 mb-3">{error}</p>}

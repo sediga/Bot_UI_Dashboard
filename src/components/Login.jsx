@@ -97,7 +97,7 @@ const Login = () => {
       <SectionWithBackground>
         {/* Inside the wave: 2 rows -> form (fills) + footer (auto) */}
         <div className="min-h-full grid grid-rows-[1fr,auto]">
-          <div className="min-h-0 flex items-center justify-center px-4 py-44 overflow-auto">
+          <div className="min-h-0 flex items-center justify-center px-4 py-40 overflow-auto">
             <form onSubmit={handleLogin} className="p-6 rounded-lg w-full max-w-md backdrop-blur">
               <h2 className="text-2xl font-semibold mb-4">Login</h2>
               {error && <p className="text-red-500 mb-2">{error}</p>}
