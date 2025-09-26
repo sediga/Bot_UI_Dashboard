@@ -4,6 +4,7 @@ import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
 import SecretMapperModal from "./smartsteps/SecretMapperModal";
+import { makeSelectorLlmHelper } from "../helpers/selectorLlmHelper";
 
 export default function StepBuilder({
   onEnsureWebSocket,
@@ -50,6 +51,69 @@ export default function StepBuilder({
   
   
   const seenSecretIdsRef = useRef(new Set());
+  const llmRef = useRef(null);
+
+  useEffect(() => {
+    llmRef.current = makeSelectorLlmHelper({
+      baseUrl: config.apiBaseUrl,              // or config.agentServerUrl
+      endpoint: "/api/selector/suggest",
+      authType: config.authType || "api_key",
+      getToken: () => localStorage.getItem("botflows_token"),
+      concurrency: 2,
+      onResult: (step, res) => {
+        const normalize = (s, fallbackSource = "unknown", fallbackScore = 0) => {
+          if (!s) return null;
+          if (typeof s === "string") {
+            const sel = s.trim();
+            return sel ? { selector: sel, source: fallbackSource, score: fallbackScore } : null;
+          }
+          const sel = (s.selector || s.replaySelector || s.css || "").trim();
+          return sel ? { selector: sel, source: s.source || fallbackSource, score: Number(s.score ?? fallbackScore) } : null;
+        };
+
+        // 1) choose best selector based on score
+        const bestSelStr = (res.bestSelector || step.improvedSelector || step.selector || "").trim();
+        const best = bestSelStr ? { selector: bestSelStr, source: "llm:best", score: 10_000 } : null;
+
+        // 2) Bring in LLM suggestions (give them a high default score unless they provide one)
+        const llmList = (res.suggestions || [])
+          .map(s => normalize(s, "llm:suggestion", 9_000))
+          .filter(Boolean);
+
+        // 3) Existing selectors (objects) + the recorded single selector
+        const existing = [
+          ...(Array.isArray(step.selectors) ? step.selectors.map(o => normalize(o, o?.source, o?.score)) : []),
+          normalize(step.selector, "recorded", 0),
+        ].filter(Boolean);
+
+        // 4) Merge & de-dupe by selector string, keeping the higher score on conflicts
+        const bySel = new Map();
+        [...llmList, ...existing].filter(Boolean).forEach(s => {
+          const prev = bySel.get(s.selector);
+          if (!prev || s.score > prev.score) bySel.set(s.selector, s);
+        });
+
+        // 5) Sort by score DESC (LLM items will naturally float to the top)
+        const ordered = Array.from(bySel.values()).sort((a, b) => b.score - a.score);
+
+        // 6) Write back so the player tries LLM/high-score first automatically
+        updateStepWithImprovedSelector(step.id, {
+          selector: ordered[0]?.selector || step.selector,
+          selectors: ordered,                     // keep as objects with score/source
+          improvedSelector: ordered[0]?.selector, // mirror top pick
+          suggestions: res.suggestions,
+          bestSelectorScore: res.score,
+          bestSelectorReason: res.reason,
+          promptVersion: res.promptVersion,
+          label: (res.label && res.label.trim()) ? res.label : step.label,
+          recordedSelector: step.selector,        // optional: for debugging
+        });
+      }
+    });
+    return () => { llmRef.current = null; };
+    // include deps that would actually change your API wiring if needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateStepWithImprovedSelector, config.apiBaseUrl, config.authType]);
 
   useEffect(() => {
     currentLoopIdRef.current = currentLoopId;
@@ -101,6 +165,13 @@ useEffect(() => {
           const kind = String(payload.type || raw.type || "").toLowerCase();
           // ignore heartbeats/noise
           if (kind === "ping" || kind === "ready" || kind === "heartbeat") return;
+          // Record focus for context but don't emit a step or call LLM
+          if (kind === "focus") {
+            // keep anything you find handy for later correlation
+            // e.g., last focused selector/snapshot/time
+            // lastFocusRef.current = { selector: payload.selector, ts: payload.timestamp, es: payload.elementSnapshot };
+            return;
+          }
           // StepBuilder processes only events; logs are handled by parent
           if (channel !== "event") return;
 
@@ -142,36 +213,33 @@ useEffect(() => {
             }
 
             const isSmartColumnClick = payload.type === "clickInColumn";
+            const es = payload.elementSnapshot || {};
+            // Build from payload first so new agent fields flow through automatically
+            const EXCLUDE = new Set(["__proto__", "prototype", "constructor"]); // safety
+
+            const safePayload = Object.fromEntries(
+              Object.entries(payload).filter(([k]) => !EXCLUDE.has(k))
+            );
 
             const step = {
-              id: crypto.randomUUID(),
-              eventId: payload.eventId,   // 👈 add this
-              type: "uiAction",
-              action: payload.action,
-              value: payload.value || null,
-              url: payload.url || null,
-              timestamp: payload.timestamp || Date.now(),
+              ...safePayload,                               // keep everything the agent sent
+              id: crypto.randomUUID(),                      // UI step id (do NOT let payload override)
+              type: "uiAction",                             // normalize step type
               label: getStepLabel(payload),
-              selector: payload.selector,
-              selectors: payload.selectors,
-              improvedSelector: payload.improvedSelector,
-              devToolsSelector: payload.devToolsSelector,
-              tagName: payload.tagName,
-              attributes: payload.attributes || {},
-              innerText: payload.innerText,
-              elementText: payload.elementText,
-              classList: payload.classList || [],
-              boundingBox: payload.boundingBox,
-              frameContext: payload.frameContext || null,
-              frameUrl: payload.frameUrl || null,
-              isVisible: payload.isVisible ?? true,
-              computedStyles: payload.computedStyles || {},
-              containerSelector: payload.containerSelector || null,
-              signature: payload.signature || null,
-              role: payload.role || null,
-              accessibleName: payload.accessibleName || null,
+              labelText: (es.labelText ?? payload.labelText) ?? null,
+              anchorText: (es.anchorText ?? payload.anchorText) ?? null,
+              domPath: (es.domPath ?? payload.domPath) ?? null,
+              accessibleName: (payload.accessibleName ?? es.accessibleName) ?? null,
+              role: (payload.role ?? es.role) ?? null,
             };
 
+            // normalize a few shapes so downstream code is safe
+            step.classList ||= [];
+            step.attributes ||= {};
+            step.selectors ||= [];
+            if (step.isVisible === undefined) step.isVisible = true;
+
+            // ---- keep your existing loop-specific enrichment ----
             if (currentLoopIdRef.current) {
               step.parentId = currentLoopIdRef.current;
 
@@ -182,14 +250,14 @@ useEffect(() => {
                 step.smartActionType = payload.actionType || "click";
               }
 
-              if (["change", "type", "select", "click"].includes(payload.action)) {
-                const dynamicVal = payload.attributes?.["data-dynamic-value"];
-                if (dynamicVal?.startsWith("{{") && dynamicVal.endsWith("}}")) {
+              if (["change", "type", "select", "click"].includes(step.action)) {
+                const dynamicVal = step.attributes?.["data-dynamic-value"];
+                if (typeof dynamicVal === "string" && dynamicVal.startsWith("{{") && dynamicVal.endsWith("}}")) {
                   step.dynamicValue = dynamicVal;
                   step.isDynamic = true;
-                  step.transformType = payload.attributes?.["data-transform-type"] || null;
-                  step.transform = payload.attributes?.["data-transform"] || null;
-                  step.mappedScope = payload.attributes?.["data-botflows-mapped"] || "global";
+                  step.transformType = step.attributes?.["data-transform-type"] || null;
+                  step.transform = step.attributes?.["data-transform"] || null;
+                  step.mappedScope = step.attributes?.["data-botflows-mapped"] || "global";
                 }
               }
             }
@@ -198,6 +266,7 @@ useEffect(() => {
               step.validationStatus = "failed";
               step.validationReason = payload.metadata.validation.reason;
             }
+
 
             const isSecretEvt =
               payload.isSensitive &&
@@ -223,7 +292,22 @@ useEffect(() => {
             }
 
             newSteps.push(step);
-
+           
+            try {
+              const actionStr = typeof step.action === "string" ? step.action.toLowerCase() : "";
+              const actionable = ["click", "change", "select", "type", "dblclick", "setradio", "setcheckbox", "setselect"].includes(actionStr);
+              const hasCandidates = (Array.isArray(step.selectors) && step.selectors.length) || !!step.selector;
+              const visibleEnough = step.isVisible !== false; // allow undefined/true
+              if (actionable && hasCandidates && visibleEnough) {
+                llmRef.current?.enqueue(step);
+              }
+            } 
+            catch 
+            {
+              // don't let LLM issues block the main flow
+              console.warn("LLM enqueue failed");
+            }
+            
             try {
               if (!step.label || step.label.includes("Unknown")) {
                 const updatedLabel = getStepLabel(payload);
@@ -238,6 +322,7 @@ useEffect(() => {
           console.error("Failed to process raw message:", err);
         }
       });
+      
 
       if (newSteps.length > 0) {
         setSteps(prev => [...prev, ...newSteps]);
