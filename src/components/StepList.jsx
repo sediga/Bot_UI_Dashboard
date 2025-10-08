@@ -55,10 +55,10 @@ const SELECTOR_PARAM_ACTIONS = new Set([
 ]);
 
 // Actions where data is just injected into a known element (no selector templating)
-const VALUE_ONLY_ACTIONS = new Set([
-  "type", "fill", "input", "setvalue", "paste", "clear",
-  "upload", "settextarea", "setdate", "settime", "select", // typical <select> by value
-]);
+ const VALUE_ONLY_ACTIONS = new Set([
+   "type", "fill", "input", "setvalue", "paste", "clear",
+   "upload", "settextarea", "setdate", "settime"
+ ]);
 
 const TEXT_INPUT_TYPES = new Set([
   "text","email","tel","search","password","number","date","datetime-local","time","url"
@@ -108,26 +108,26 @@ const replaceInSelector = (sel, literal, template) => {
   let s = sel;
   const FROM = escRe(String(literal));
 
-  // Choose filtered token by context
+  // since withFilter is a no-op, these are just `template`
   const T_TEXT = withFilter(template, "text");
   const T_CSS  = withFilter(template, "css");
 
   const rules = [
-    // Attribute equalities that carry identifiers/text -> use CSS escaping
+    // Attribute equalities that carry identifiers/text -> use CSS escaping semantics
     [new RegExp(`(\\[\\s*(?:value|name|placeholder|title)\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
     [new RegExp(`(\\[\\s*for\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
     [new RegExp(`(\\[\\s*id\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
     [new RegExp(`(\\[\\s*data-[^\\]=]+\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
 
-    // :has-text("…") / :text("…") contexts -> use text escaping
-    [new RegExp(`(:has-text\\(\\s*")${FROM}(")\\)`, "gi"), `$1${T_TEXT}$2)`],
-    [new RegExp(`(:text\\(\\s*")${FROM}(")\\)`, "gi"), `$1${T_TEXT}$2)`],
+    // :has-text("…") / :text("…") -> use text semantics (fixed: no trailing ) in replacement)
+    [new RegExp(`(:has-text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
+    [new RegExp(`(:text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
 
-    // role=name regex contexts (keep regex wrapper, swap middle; raw token is fine)
+    // role=name regex contexts (keep regex wrapper, swap middle)
     [new RegExp(`(\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
     [new RegExp(`(role=\\w+\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
 
-    // General quoted fallback (last): default to text semantics
+    // General quoted fallback (default to text semantics)
     [new RegExp(`(')${FROM}(')`, "g"), `$1${T_TEXT}$2`],
     [new RegExp(`(")${FROM}(")`, "g"), `$1${T_TEXT}$2`],
   ];
@@ -136,52 +136,49 @@ const replaceInSelector = (sel, literal, template) => {
   return s;
 };
 
+
 const withFilter = (tok, filter) =>
   typeof tok === "string" && tok.includes("{{") && !tok.includes("|")
     ? tok.replace(/}}$/, `|${filter}}}`)
     : tok;
 
-    function instantiateSelectorTemplates(step, valueToken) {
-  const tText = withFilter(valueToken, "text");
-  const tCss  = withFilter(valueToken, "css");
+  function instantiateSelectorTemplates(step, valueToken) {
+    const out = [];
+    const list = Array.isArray(step.selectorTemplates) ? step.selectorTemplates : [];
 
-  const out = [];
-  const list = Array.isArray(step.selectorTemplates) ? step.selectorTemplates : [];
-
-  for (const tmpl of list) {
-    if (!tmpl?.selector) continue;
-    // Replace known placeholders; keep it simple and explicit
-    let sel = tmpl.selector
-      .replaceAll("{{VALUE|text}}", valueToken)
-      .replaceAll("{{VALUE|css}}",  valueToken);
-
-    out.push({
-      selector: sel,
-      source: `${tmpl.source || "template"}`,
-      param: true,
-    });
-  }
-
-  // Always keep any existing recorded selector as a tail fallback
-  if (typeof step.selector === "string" && step.selector) {
-    out.push({ selector: step.selector, source: "recorded", param: false });
-  }
-  // and any recorded candidates
-  if (Array.isArray(step.selectors)) {
-    for (const c of step.selectors) {
-      if (c?.selector) out.push({ ...c });
+    for (const tmpl of list) {
+      if (!tmpl?.selector) continue;
+      // Only support plain {{VALUE}} now
+      const sel = tmpl.selector.replaceAll("{{VALUE}}", valueToken);
+      out.push({
+        selector: sel,
+        source: `${tmpl.source || "template"}`,
+        param: true,
+      });
     }
-  }
-  return out;
-}
 
-const patchSelectorsForParam = (step, oldLiteral, template) => {
-  if (!step || !template) return step;
-
-  // Only templatize selectors when the element is chosen by the data
-  if (!shouldTemplatizeSelector(step)) {
-    return step; // leave selector(s) untouched
+    // Always keep any existing recorded selector as a tail fallback
+    if (typeof step.selector === "string" && step.selector) {
+      out.push({ selector: step.selector, source: "recorded", param: false });
+    }
+    // and any recorded candidates
+    if (Array.isArray(step.selectors)) {
+      for (const c of step.selectors) {
+        if (c?.selector) out.push({ ...c });
+      }
+    }
+    return out;
   }
+
+
+
+  const patchSelectorsForParam = (step, oldLiteral, template) => {
+    if (!step || !template) return step;
+
+    // Only templatize selectors when the element is chosen by the data
+    if (!shouldTemplatizeSelector(step)) {
+      return step; // leave selector(s) untouched
+    }
 
   const next = { ...step };
   let changed = false;
@@ -198,7 +195,8 @@ const patchSelectorsForParam = (step, oldLiteral, template) => {
   } else {
     // Back-compat: regex/literal patch
     if (typeof step.selector === "string" && step.selector && oldLiteral) {
-      const newSel = replaceInSelector(step.selector, oldLiteral, template);
+      const LIT = oldLiteral || step?.value || step?.labelText || "";
+      const newSel = replaceInSelector(step.selector, LIT, template);
       if (newSel !== step.selector) {
         next.originalSelector = step.originalSelector || step.selector;
         next.selector = newSel;
@@ -208,7 +206,8 @@ const patchSelectorsForParam = (step, oldLiteral, template) => {
     if (Array.isArray(step.selectors) && step.selectors.length && oldLiteral) {
       const patched = step.selectors.map((c) => {
         const sel = c?.selector || "";
-        const newSel = replaceInSelector(sel, oldLiteral, template);
+        const LIT = oldLiteral || step?.value || step?.labelText || "";
+        const newSel = replaceInSelector(sel, LIT, template);
         if (newSel !== sel) {
           changed = true;
           return {
@@ -225,14 +224,15 @@ const patchSelectorsForParam = (step, oldLiteral, template) => {
     }
   }
 
-  // Container selector only if we’re in selector-parametric mode and a literal exists
-  if (typeof step.containerSelector === "string" && step.containerSelector && oldLiteral) {
-    const cNew = replaceInSelector(step.containerSelector, oldLiteral, template);
+  if (typeof step.containerSelector === "string" && step.containerSelector) {
+    const LIT = oldLiteral || step?.value || step?.labelText || "";
+    const cNew = replaceInSelector(step.containerSelector, LIT, template);
     if (cNew !== step.containerSelector) {
       next.containerSelector = cNew;
       changed = true;
     }
   }
+
 
   return changed ? next : step;
 };
@@ -240,7 +240,9 @@ const patchSelectorsForParam = (step, oldLiteral, template) => {
 
 function sanitize(next) {
   // trim outer quotes and whitespace
-  if (typeof next === "string") {
+  if (Array.isArray(next)) {
+    return next.map(v => typeof v === "string" ? v.trim() : v);
+  } else if (typeof next === "string") {
     next = next.trim();
     if ((next.startsWith('"') && next.endsWith('"')) ||
         (next.startsWith("'") && next.endsWith("'"))) {
@@ -249,6 +251,8 @@ function sanitize(next) {
   }
   return next;
 }
+
+const displayValue = (v) => Array.isArray(v) ? v.join(", ") : (v ?? "");
 
 function applyValue(stepId, token) {
   setSteps(prev =>
@@ -545,7 +549,7 @@ const columnsForThisStep = (() => {
                         setEditingValueStepId(step.id);
                       }}
                     >
-                      ={` "${step.value}"`}
+                      ={` "${displayValue(step.value)}"`}
                     </button>
                   )
                 )}                {step.validationStatus === "failed" && (

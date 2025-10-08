@@ -126,8 +126,10 @@ export default function StepBuilder({
 
   function getStepLabel(step) {
     const action = step.action || "Action";
+    const rawVal = (step.value !== undefined ? step.value : step.optionText);
+    const pretty = Array.isArray(rawVal) ? rawVal.join(", ") : rawVal;
     const text =
-      step.value ||
+      (pretty && String(pretty)) ||
       step.elementText ||
       step.innerText ||
       step.attributes?.["aria-label"] ||
