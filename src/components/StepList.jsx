@@ -39,9 +39,210 @@ const [editingValueStepId, setEditingValueStepId] = useState(null);
 // keep an input ref per step so we can insert at caret
 const valueInputRefs = useRef({});
 
+// --- parameterize selectors helpers ---------------------------------------
+const isTemplate = (v) => typeof v === "string" && /\{\{.+\}\}/.test(v);
+
+// Regex-escape literal for safe replacement
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// ---- selector param policies -------------------------------------------------
+
+// Actions where the *target element* is chosen by data
+const SELECTOR_PARAM_ACTIONS = new Set([
+  "setcheckbox", "togglecheckbox", "check", "uncheck",
+  "setradio", "selectradio",
+  "clickbytext", "clickoption", "chooseoption", "selectbytext",
+]);
+
+// Actions where data is just injected into a known element (no selector templating)
+ const VALUE_ONLY_ACTIONS = new Set([
+   "type", "fill", "input", "setvalue", "paste", "clear",
+   "upload", "settextarea", "setdate", "settime"
+ ]);
+
+const TEXT_INPUT_TYPES = new Set([
+  "text","email","tel","search","password","number","date","datetime-local","time","url"
+]);
+
+const isCheckboxOrRadio = (step) => {
+  const t = step?.signature?.attrs?.type?.toLowerCase?.() || "";
+  if (t === "checkbox" || t === "radio") return true;
+  const sel = step?.selector || "";
+  return /\binput\s*\[\s*type\s*=\s*["']?(checkbox|radio)["']?\s*\]/i.test(sel);
+};
+
+// “Does the selector depend on the data?” => only then templatize
+const shouldTemplatizeSelector = (step) => {
+  if (!step || step.type !== "uiAction") return false;
+
+  // explicit templates on the step mean “yes”
+  if (Array.isArray(step.selectorTemplates) && step.selectorTemplates.length) return true;
+
+  const a = (step.action || "").toLowerCase();
+
+  // Checkbox / radio are always label/value-driven
+  if (isCheckboxOrRadio(step)) return true;
+
+  // If the action is known to be selector-parametric
+  if (SELECTOR_PARAM_ACTIONS.has(a)) return true;
+
+  // If selector clearly uses visible text to pick the node
+  if (/:has-text\(|:text\(/i.test(step.selector || "")) return true;
+
+  // If it's a plain text-entry kind of step, never templatize selector
+  if (VALUE_ONLY_ACTIONS.has(a)) return false;
+
+  // Text-ish inputs: value-only
+  const tag = step?.signature?.tagName?.toLowerCase?.() || "";
+  const type = step?.signature?.attrs?.type?.toLowerCase?.() || "";
+  if (tag === "input" && (TEXT_INPUT_TYPES.has(type) || type === "")) return false;
+  if (tag === "textarea") return false;
+
+  return false;
+};
+
+
+// Conservatively replace the literal inside common selector patterns
+const replaceInSelector = (sel, literal, template) => {
+  if (!sel || !literal || !template) return sel;
+  let s = sel;
+  const FROM = escRe(String(literal));
+
+  // since withFilter is a no-op, these are just `template`
+  const T_TEXT = withFilter(template, "text");
+  const T_CSS  = withFilter(template, "css");
+
+  const rules = [
+    // Attribute equalities that carry identifiers/text -> use CSS escaping semantics
+    [new RegExp(`(\\[\\s*(?:value|name|placeholder|title)\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+    [new RegExp(`(\\[\\s*for\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+    [new RegExp(`(\\[\\s*id\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+    [new RegExp(`(\\[\\s*data-[^\\]=]+\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+
+    // :has-text("…") / :text("…") -> use text semantics (fixed: no trailing ) in replacement)
+    [new RegExp(`(:has-text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
+    [new RegExp(`(:text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
+
+    // role=name regex contexts (keep regex wrapper, swap middle)
+    [new RegExp(`(\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
+    [new RegExp(`(role=\\w+\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
+
+    // General quoted fallback (default to text semantics)
+    [new RegExp(`(')${FROM}(')`, "g"), `$1${T_TEXT}$2`],
+    [new RegExp(`(")${FROM}(")`, "g"), `$1${T_TEXT}$2`],
+  ];
+
+  for (const [rx, rep] of rules) s = s.replace(rx, rep);
+  return s;
+};
+
+
+const withFilter = (tok, filter) =>
+  typeof tok === "string" && tok.includes("{{") && !tok.includes("|")
+    ? tok.replace(/}}$/, `|${filter}}}`)
+    : tok;
+
+  function instantiateSelectorTemplates(step, valueToken) {
+    const out = [];
+    const list = Array.isArray(step.selectorTemplates) ? step.selectorTemplates : [];
+
+    for (const tmpl of list) {
+      if (!tmpl?.selector) continue;
+      // Only support plain {{VALUE}} now
+      const sel = tmpl.selector.replaceAll("{{VALUE}}", valueToken);
+      out.push({
+        selector: sel,
+        source: `${tmpl.source || "template"}`,
+        param: true,
+      });
+    }
+
+    // Always keep any existing recorded selector as a tail fallback
+    if (typeof step.selector === "string" && step.selector) {
+      out.push({ selector: step.selector, source: "recorded", param: false });
+    }
+    // and any recorded candidates
+    if (Array.isArray(step.selectors)) {
+      for (const c of step.selectors) {
+        if (c?.selector) out.push({ ...c });
+      }
+    }
+    return out;
+  }
+
+
+
+  const patchSelectorsForParam = (step, oldLiteral, template) => {
+    if (!step || !template) return step;
+
+    // Only templatize selectors when the element is chosen by the data
+    if (!shouldTemplatizeSelector(step)) {
+      return step; // leave selector(s) untouched
+    }
+
+  const next = { ...step };
+  let changed = false;
+
+  // Preferred: selectorTemplates
+  if (Array.isArray(step.selectorTemplates) && step.selectorTemplates.length) {
+    next.selectors = instantiateSelectorTemplates(step, template);
+    const primary = next.selectors?.[0]?.selector;
+    if (primary) {
+      next.originalSelector = next.originalSelector || step.selector || primary;
+      next.selector = primary;
+    }
+    changed = true;
+  } else {
+    // Back-compat: regex/literal patch
+    if (typeof step.selector === "string" && step.selector && oldLiteral) {
+      const LIT = oldLiteral || step?.value || step?.labelText || "";
+      const newSel = replaceInSelector(step.selector, LIT, template);
+      if (newSel !== step.selector) {
+        next.originalSelector = step.originalSelector || step.selector;
+        next.selector = newSel;
+        changed = true;
+      }
+    }
+    if (Array.isArray(step.selectors) && step.selectors.length && oldLiteral) {
+      const patched = step.selectors.map((c) => {
+        const sel = c?.selector || "";
+        const LIT = oldLiteral || step?.value || step?.labelText || "";
+        const newSel = replaceInSelector(sel, LIT, template);
+        if (newSel !== sel) {
+          changed = true;
+          return {
+            ...c,
+            originalSelector: c.originalSelector || sel,
+            selector: newSel,
+            source: `${c.source || "unknown"}:param`,
+            param: true,
+          };
+        }
+        return c;
+      });
+      if (changed) next.selectors = patched;
+    }
+  }
+
+  if (typeof step.containerSelector === "string" && step.containerSelector) {
+    const LIT = oldLiteral || step?.value || step?.labelText || "";
+    const cNew = replaceInSelector(step.containerSelector, LIT, template);
+    if (cNew !== step.containerSelector) {
+      next.containerSelector = cNew;
+      changed = true;
+    }
+  }
+
+
+  return changed ? next : step;
+};
+
+
 function sanitize(next) {
   // trim outer quotes and whitespace
-  if (typeof next === "string") {
+  if (Array.isArray(next)) {
+    return next.map(v => typeof v === "string" ? v.trim() : v);
+  } else if (typeof next === "string") {
     next = next.trim();
     if ((next.startsWith('"') && next.endsWith('"')) ||
         (next.startsWith("'") && next.endsWith("'"))) {
@@ -51,15 +252,18 @@ function sanitize(next) {
   return next;
 }
 
+const displayValue = (v) => Array.isArray(v) ? v.join(", ") : (v ?? "");
+
 function applyValue(stepId, token) {
   setSteps(prev =>
     prev.map(s => {
       if (s.id !== stepId) return s;
+
       const el = valueInputRefs.current[stepId];
       const current = s.value || "";
       let next = token;
 
-      // If the input is focused, insert at caret; otherwise replace whole value
+      // insert at caret when focused, else replace whole value
       if (el && document.activeElement === el) {
         const start = el.selectionStart ?? current.length;
         const end   = el.selectionEnd ?? current.length;
@@ -68,8 +272,14 @@ function applyValue(stepId, token) {
 
       next = sanitize(next);
 
+      // If turning a literal into a {{template}}, also patch selectors
+      let patched = s;
+      if (isTemplate(next) && current && !isTemplate(current)) {
+        patched = patchSelectorsForParam(s, current, next);
+      }
+
       return {
-        ...s,
+        ...patched,
         value: next,
         dynamicValue: next,
         label: `${(s.action || "Action").replace(/^./, c => c.toUpperCase())}: ${next}`,
@@ -94,6 +304,7 @@ function applyValue(stepId, token) {
       .replace(/^_+|_+$/g, "")
       .slice(0, 40) || "secret";
   };  
+  
 const updateStep = (id, patch) =>
   setSteps(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
 
@@ -338,7 +549,7 @@ const columnsForThisStep = (() => {
                         setEditingValueStepId(step.id);
                       }}
                     >
-                      ={` "${step.value}"`}
+                      ={` "${displayValue(step.value)}"`}
                     </button>
                   )
                 )}                {step.validationStatus === "failed" && (
@@ -576,15 +787,26 @@ const columnsForThisStep = (() => {
               setPendingStep(null);
             }}
             onSave={(newValue) => {
-              const updatedStep = {
-                ...pendingStep,
-                value: newValue,
-                dynamicValue: newValue,
-                label: `${pendingStep.action.charAt(0).toUpperCase() + pendingStep.action.slice(1)}: ${newValue}`
-              };
-              setSteps((prev) =>
-                prev.map((s) => (s.id === pendingStep.id ? updatedStep : s))
+              setSteps(prev =>
+                prev.map(s => {
+                  if (s.id !== pendingStep.id) return s;
+
+                  let updated = {
+                    ...s,
+                    value: newValue,
+                    dynamicValue: newValue,
+                    label: `${s.action.charAt(0).toUpperCase() + s.action.slice(1)}: ${newValue}`
+                  };
+
+                  // If switching literal -> template, parameterize selectors
+                  if (isTemplate(newValue) && s.value && !isTemplate(s.value)) {
+                    updated = patchSelectorsForParam(updated, s.value, newValue);
+                  }
+
+                  return updated;
+                })
               );
+
               setShowParamModal(false);
               setPendingStep(null);
             }}
