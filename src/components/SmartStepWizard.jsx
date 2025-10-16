@@ -57,13 +57,35 @@ const handleFinish = () => {
       if (element) gridSelector = getUniqueSelector(element);
     }
 
-    const rowSelector = `${gridSelector} div[role='row']`;
+    const rowSelector =
+      gridMeta?.rowSelector
+        ? gridMeta.rowSelector                                         // if the probe explicitly sent one
+        : gridMeta?.itemSelector
+          ? `${gridSelector} ${gridMeta.itemSelector}`                 // card list
+          : `${gridSelector} div[role='row']`;                         // true grids
 
-    const columnMappings = (gridMeta.columnMappings || [])
-      .filter(col => selectedColumns.includes(col.header.header))
-      .map(col => ({
-        ...col
-      }));
+    const getHeaderName = (col) => {
+      const h = typeof col.header === "string"
+        ? col.header
+        : (col.header?.header || col.header?.name || col.header?.key || col.key || col.field);
+      return h;
+    };
+
+    const norm = (s) =>
+      (s ?? "")
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^a-z0-9_]/g, "");
+
+    const columnMappings =
+      (gridMeta.columnMappings || [])
+        .filter(col => {
+          const h = getHeaderName(col);
+          return selectedColumns.some(sel => norm(sel) === norm(h));
+        })
+        .map(col => ({ ...col }));
 
     payload = {
       id: `extractStep_${Date.now()}`,
