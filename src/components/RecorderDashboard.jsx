@@ -10,6 +10,7 @@ import DashboardTour from './DashboardTour'; // Adjust path as needed
 import CreatePanel from "./CreatePanel";
 import ConfigurePanel from "./ConfigurePanel";
 import SectionWithBackground from "./SectionWithBackground";
+import RunsPanel from "./RunsPanel";
 
 
 export default function RecorderDashboard() {
@@ -407,7 +408,7 @@ export default function RecorderDashboard() {
       <div className="shrink-0">
         <div className="bg-white border-b px-6 py-2">
           <nav className="flex space-x-2" aria-label="Tabs">
-            {["create", "replay", "config"].map((tab) => (
+            {["create", "replay", "runs", "config"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => handleTabChange(tab)}
@@ -419,6 +420,7 @@ export default function RecorderDashboard() {
               >
                 {tab === "create" && "Create Flow"}
                 {tab === "replay" && "Replay"}
+                {tab === "runs" && "Runs"}
                 {tab === "config" && "Configure"}
               </button>
             ))}
@@ -467,9 +469,12 @@ export default function RecorderDashboard() {
             />
           </main>
         )}
-
+        {activeTab === "runs" && (
+          <main className="relative p-6 overflow-auto h-full">
+            <RunsPanel />
+          </main>
+        )}
         {activeTab === "config" && <ConfigurePanel />}
-
         {showConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-lg">

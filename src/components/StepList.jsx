@@ -170,8 +170,6 @@ const withFilter = (tok, filter) =>
     return out;
   }
 
-
-
   const patchSelectorsForParam = (step, oldLiteral, template) => {
     if (!step || !template) return step;
 
