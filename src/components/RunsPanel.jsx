@@ -98,6 +98,11 @@ export default function RunsPanel({ cfg = config }) {
       setErr(e.message || String(e));
     } finally { setLoading(false); }
   }
+  
+  useEffect(() => {
+    const id = setInterval(fetchPage, 15_000); // every 15s
+    return () => clearInterval(id);
+  }, [skip, take, status, flowId, from, to]);
 
   // refresh when paging or when token changes (e.g., after login)
   useEffect(() => {
@@ -146,6 +151,28 @@ export default function RunsPanel({ cfg = config }) {
         </div>
         <button onClick={()=>{ setSkip(0); fetchPage(); }} className="px-4 py-2 rounded border bg-white hover:bg-slate-50">
           Apply
+        </button>
+        <button
+          type="button"
+          onClick={fetchPage}
+          aria-label="Refresh"
+          title="Refresh"
+          disabled={loading}
+          className="px-3 py-2 rounded border bg-white hover:bg-slate-50 disabled:opacity-50 inline-flex items-center"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {/* circular arrow refresh icon */}
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <polyline points="21 3 21 12 12 12" />
+          </svg>
         </button>
       </div>
 
