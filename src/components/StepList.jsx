@@ -354,6 +354,11 @@ const updateStep = (id, patch) =>
   };
 
   const handleSmartStepCreated = async (step) => {
+    if (currentLoopId) {
+      // Only auto-nest non-loop smart steps
+      const isLoop = ["loop","dataLoop","counterloop","gridLoop"].includes(step.type);
+      if (!isLoop) step.parentId = currentLoopId;
+    }
     setSteps((prev) => [...prev, step]);
     setPickedTarget(null);
     setShowSmartWizard(false);
@@ -373,7 +378,7 @@ const updateStep = (id, patch) =>
 
   const extractSteps = steps.filter((step) => ["gridExtract","importData"].includes(step.type));
   const canAddSmartStep =
-    agentStatus === "recording" && !showSmartWizard && currentLoopId === null;
+    agentStatus === "recording" && !showSmartWizard;
 
   const startLoopRecording = async (step) => {
     try {
@@ -768,6 +773,7 @@ const columnsForThisStep = (() => {
         {showSmartWizard && (
           <Modal onClose={handleCancelWizard}>
             <SmartStepWizard
+              parentId={currentLoopId}
               pickedTarget={pickedTarget}
               onSmartStepCreated={handleSmartStepCreated}
               onCancel={handleCancelWizard}

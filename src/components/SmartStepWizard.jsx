@@ -8,6 +8,7 @@ import { StepCard } from "./StepCard";
 import ImportDataStep from "./smartsteps/ImportDataStep";
 
 export default function SmartStepWizard({
+  parentId,
   pickedTarget,
   onSmartStepCreated,
   onCancel,
@@ -117,6 +118,10 @@ const handleFinish = () => {
       source: selectedSource,
       actionsPerRow: []
     };
+
+    if (parentId && !["loop","dataLoop","counterloop","gridLoop"].includes(payload.type)) {
+      payload.parentId = parentId;
+    }
 
     fetch(`${config.agentServerUrl}/api/start-loop-recording`, {
       method: "POST",
