@@ -80,17 +80,7 @@ const SMART_STEP_CONFIG = [
         type: "exportData",
         fields: ["stepName", "sourceStepId", "fileName", "format", "timestamped"],
         disabled: false
-      },
-      {
-        id: "import-data (coming soon)",
-        title: "Import Data",
-        description: "Import data from CSV or JSON file.",
-        emoji: "📥",
-        type: "importData",
-        fields: ["stepName", "destinationStepId", "fileName", "format"],
-        disabled: true
       }
-
     ]
   },
   {
