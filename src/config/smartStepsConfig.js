@@ -94,14 +94,6 @@ const SMART_STEP_CONFIG = [
         type: "ifBlock",
         fields: [],
         disabled: true
-      },
-      {
-        id: "wait-for-element",
-        title: "Wait for Element (coming soon)",
-        description: "Pause until element appears.",
-        type: "waitForElement",
-        fields: [],
-        disabled: true
       }
     ]
   }
