@@ -367,6 +367,7 @@ useEffect(() => {
         url: formattedUrl,
       };
       addStep(navigateStep);
+      setCurrentLoopId?.(navigateStep.id);
       const authType = config.authType || "jwt";
       const headers = {
         "Content-Type": "application/json",

@@ -35,6 +35,29 @@ const [editingValueStepId, setEditingValueStepId] = useState(null);
  const [columnMenu, setColumnMenu] = useState({
    open: false, x: 0, y: 0, stepId: null, columns: []
  });
+// --- generic container model (any container can nest any container) ---
+const CONTAINER_TYPES = new Set(["loop", "dataLoop", "counterloop", "navigate"]);
+const isContainer = (s) => !!s && CONTAINER_TYPES.has(s.type);
+
+const [containerStack, setContainerStack] = useState([]); // stack of step ids
+
+// derive current container from stack; fall back to prop for back-compat
+const currentContainerId = containerStack.length
+  ? containerStack[containerStack.length - 1]
+  : (currentLoopId ?? null);
+
+const pushContainer = (id) => {
+  setContainerStack((prev) => [...prev, id]);
+  if (setCurrentLoopId) setCurrentLoopId(id); // keep external consumers in sync
+};
+
+const popContainer = () => {
+  setContainerStack((prev) => {
+    const next = prev.slice(0, -1);
+    if (setCurrentLoopId) setCurrentLoopId(next.length ? next[next.length - 1] : null);
+    return next;
+  });
+};
 
 // keep an input ref per step so we can insert at caret
 const valueInputRefs = useRef({});
@@ -309,7 +332,7 @@ const updateStep = (id, patch) =>
   useEffect(() => {
     const initialExpanded = {};
     steps.forEach((step, index) => {
-      if (["dataLoop", "counterloop", "loop"].includes(step.type)) {
+      if (isContainer(step)) {
         initialExpanded[step.id] = true;
       }
     });
@@ -322,6 +345,17 @@ const updateStep = (id, patch) =>
     }
   }, [steps]);
 
+  // If parent tells us the current container (e.g., top-level Navigate just created),
+  // ensure it's on our internal stack so the UI behaves like a container.
+  useEffect(() => {
+    if (!currentLoopId) return;
+    if (containerStack.includes(currentLoopId)) return;
+    const s = steps.find(st => st.id === currentLoopId);
+    if (s && isContainer(s)) {
+      pushContainer(currentLoopId);
+    }
+  }, [currentLoopId, steps]); 
+
   const toggleExpand = (id) => {
     setExpandedSteps((prev) => ({
       ...prev,
@@ -332,6 +366,7 @@ const updateStep = (id, patch) =>
   const deleteStep = (stepId) => {
     const updated = steps.filter((s) => s.id !== stepId && s.parentId !== stepId);
     setSteps(updated);
+    pruneStackAgainst(updated);
   };
 
   const deleteSubStep = (step) => {
@@ -347,25 +382,26 @@ const updateStep = (id, patch) =>
 
       const updated = steps.filter((s) => s.id !== step.id && s.id !== parentId);
       setSteps(updated);
+      pruneStackAgainst(updated);
     } else {
       const updated = steps.filter((s) => s.id !== step.id);
       setSteps(updated);
+      pruneStackAgainst(updated);
     }
   };
 
   const handleSmartStepCreated = async (step) => {
-    if (currentLoopId) {
-      // Only auto-nest non-loop smart steps
-      const isLoop = ["loop","dataLoop","counterloop","gridLoop"].includes(step.type);
-      if (!isLoop) step.parentId = currentLoopId;
+    // parent to whichever container is active
+    if (currentContainerId) {
+      step.parentId = currentContainerId;
     }
-    setSteps((prev) => [...prev, step]);
+
+    setSteps(prev => [...prev, step]);
     setPickedTarget(null);
     setShowSmartWizard(false);
 
-    if (["loop", "dataLoop", "counterloop"].includes(step.type)) {
-      await startLoopRecording(step);
-    }
+    // START ANY CONTAINER (loop / dataLoop / counterloop / navigate)
+    await startContainerRecording(step);
   };
 
   const handleCancelWizard = () => {
@@ -382,19 +418,33 @@ const updateStep = (id, patch) =>
 
   const startLoopRecording = async (step) => {
     try {
-      // await fetch(`${config.agentServerUrl}/api/start-loop-recording`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ loopName: step.name }),
-      // });
-      setCurrentLoopId(step.id);
+      pushContainer(step.id);
     } catch (err) {
       console.error("Failed to start loop recording", err);
     }
   };
 
+
+  // Finish recording for a particular container id,
+  // ending any nested containers above it first (inner → outer).
+  const finishRecordingTo = async (targetId) => {
+    if (!containerStack.length) return;
+
+    // Pop until target is on top; break if user cancels any step
+    while (containerStack.length && containerStack[containerStack.length - 1] !== targetId) {
+      const ok = await stopContainerRecording();
+      if (!ok) return; // user canceled – stop the chain
+    }
+
+    // Now end the target itself (if still present)
+    if (containerStack.length && containerStack[containerStack.length - 1] === targetId) {
+      await stopContainerRecording();
+    }
+  };
+
   const stopLoopRecording = async () => {
-    const hasSteps = steps.some((s) => s.parentId === currentLoopId);
+    const loopId = currentContainerId;
+    const hasSteps = steps.some((s) => s.parentId === loopId);
 
     if (!hasSteps) {
       const confirmDelete = window.confirm(
@@ -402,51 +452,220 @@ const updateStep = (id, patch) =>
       );
       if (!confirmDelete) return;
 
-      const updatedSteps = steps.filter(
-        (s) => s.id !== currentLoopId && s.parentId !== currentLoopId
-      );
+      const updatedSteps = steps.filter((s) => s.id !== loopId && s.parentId !== loopId);
       setSteps(updatedSteps);
+      pruneStackAgainst(updatedSteps);
     } else {
-      setFinalizedLoops((prev) => new Set(prev).add(currentLoopId));
+      setFinalizedLoops((prev) => {
+        const next = new Set(prev);
+        next.add(loopId);
+        return next;
+      });
     }
 
     try {
-      await fetch(`${config.agentServerUrl}/api/end-loop-recording`, {
-        method: "POST",
-      });
+      await fetch(`${config.agentServerUrl}/api/end-loop-recording`, { method: "POST" });
     } catch (err) {
       console.error("Failed to end loop recording", err);
     }
 
-    setCurrentLoopId(null);
+    popContainer();
+  };
+
+  // --- start any container (loop, dataLoop, counterloop, navigate) ---
+  const startContainerRecording = async (step) => {
+    if (!isContainer(step)) return;
+
+    if (step.type === "navigate") {
+      // Optimistic push so the Navigate is the *active* (innermost) container immediately
+      pushContainer(step.id);
+
+      // Try the two agent calls, but DO NOT roll back the stack on failure.
+      // UI must remain consistent: Navigate is the active container now.
+      try {
+        await fetch(`${config.agentServerUrl}/api/overlay/show`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: "Recording in a new tab. This tab is paused." }),
+        }).catch(() => {}); // non-fatal
+      } catch (_) { /* swallow */ }
+
+      try {
+        await fetch(`${config.agentServerUrl}/api/start-navigate-recording`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stepId: step.id,
+            previewUrl: step.url || "about:blank",
+            target: step.target || "newTab",
+            waitUntil: step.waitUntil || "domcontentloaded",
+            timeoutMs: step.timeoutMs || 15000,
+            ephemeral: true,
+          }),
+        }).catch(() => {}); // non-fatal
+      } catch (_) { /* swallow */ }
+
+      return; // keep Navigate on stack regardless of API success
+    }
+
+    // loop-like containers: just push (optionally notify agent here)
+    pushContainer(step.id);
+    // optionally: await fetch(`${config.agentServerUrl}/api/start-loop-recording`, { ... })
+  };
+
+
+  // --- stop current container (delete-if-empty or finalize), any type ---
+  // returns true if stopped, false if user canceled
+  const stopContainerRecording = async () => {
+    const topId = containerStack[containerStack.length - 1];
+    if (!topId) return false;
+
+    const container = steps.find(s => s.id === topId);
+    if (!container) {
+      popContainer();
+      return true;
+    }
+
+    const hasChildren = steps.some(s => s.parentId === container.id);
+    const isNav = container.type === "navigate";
+
+    if (!hasChildren) {
+      const ok = window.confirm(
+        `This ${isNav ? "navigate" : "loop"} has no recorded steps. It will be deleted. Proceed?`
+      );
+      if (!ok) return false;
+
+      // delete the empty container
+      const updated = steps.filter(s => s.id !== container.id && s.parentId !== container.id);
+      setSteps(updated);
+
+      try {
+        if (isNav) {
+          await fetch(`${config.agentServerUrl}/api/end-navigate-recording`, { method: "POST" });
+        } else {
+          await fetch(`${config.agentServerUrl}/api/end-loop-recording`, { method: "POST" }).catch(() => {});
+        }
+      } catch (e) {
+        console.error("Failed to end container recording", e);
+      }
+      try { if (isNav) await fetch(`${config.agentServerUrl}/api/overlay/hide`, { method: "POST" }); } catch {}
+
+      popContainer();
+      return true;
+    }
+
+    // has children -> finalize
+    setFinalizedLoops(prev => {
+      const next = new Set(prev);
+      next.add(container.id);
+      return next;
+    });
+
+    try {
+      if (isNav) {
+        await fetch(`${config.agentServerUrl}/api/end-navigate-recording`, { method: "POST" });
+      } else {
+        await fetch(`${config.agentServerUrl}/api/end-loop-recording`, { method: "POST" }).catch(() => {});
+      }
+    } catch (e) {
+      console.error("Failed to end container recording", e);
+    }
+    try { if (isNav) await fetch(`${config.agentServerUrl}/api/overlay/hide`, { method: "POST" }); } catch {}
+
+    popContainer();
+    return true;
+  };
+    
+  const pruneStackAgainst = (updatedSteps) => {
+    const ids = new Set(updatedSteps.map(s => s.id));
+    setContainerStack(prev => prev.filter(id => ids.has(id)));
+    if (setCurrentLoopId) {
+      const top = [...ids].includes(currentContainerId) ? currentContainerId : null;
+      setCurrentLoopId(top);
+    }
+  };
+
+  // --- container badges --------------------------------------------------------
+  const badgeText = (t) =>
+    t === "navigate"     ? "Navigate" :
+    t === "dataLoop"     ? "Data Loop" :
+    t === "counterloop"  ? "Counter Loop" :
+    t === "loop"         ? "Loop" :
+    "Container";
+
+  const badgeClass = (t) => {
+    const base = "inline-flex items-center rounded px-2 py-[2px] text-[10px] font-semibold";
+    // subtle color coding per type
+    if (t === "navigate")    return `${base} bg-indigo-100 text-indigo-700`;
+    if (t === "dataLoop")    return `${base} bg-emerald-100 text-emerald-700`;
+    if (t === "counterloop") return `${base} bg-amber-100 text-amber-700`;
+    if (t === "loop")        return `${base} bg-sky-100 text-sky-700`;
+    return `${base} bg-slate-100 text-slate-700`;
   };
 
   const renderStep = (step, level = 0) => {
     const indent = `ml-${level * 4}`;
     const hasChildren = steps.some((s) => s.parentId === step.id);
-    const isRecording = currentLoopId === step.id;
+    const isRecording = currentContainerId === step.id;
     const isFinalized = finalizedLoops.has(step.id);
- const parentLoop = steps.find(s => s.id === step.parentId && s.type === "dataLoop");
-const columnsForThisStep = (() => {
-  if (!parentLoop) return [];
-  // resolve source step id (string or {stepId})
-  const sourceId = typeof parentLoop.source === "string"
-    ? parentLoop.source
-    : (parentLoop.source?.stepId || parentLoop.source);
-  const src = steps.find(s => s.id === sourceId);
-  if (!src) return [];
-  if (src.type === "gridExtract") {
-    return (src.columnMappings || [])
-      .map(c => c?.header?.header)
-      .filter(Boolean);
+
+    const finishLabel = step.type === "navigate" ? "Finish Recording" : "Finish Loop Recording";
+    // find the nearest dataLoop ancestor (works through navigate, loop, etc.)
+    const dataLoopAncestor = findAncestor(
+      steps,
+      step.parentId,
+      (n) => n.type === "dataLoop"
+    );
+
+    const columnsForThisStep = (() => {
+      if (!dataLoopAncestor) return [];
+
+      // resolve source step id (string or {stepId})
+      const sourceId = typeof dataLoopAncestor.source === "string"
+        ? dataLoopAncestor.source
+        : (dataLoopAncestor.source?.stepId || dataLoopAncestor.source);
+
+      const src = steps.find(s => s.id === sourceId);
+      if (!src) return [];
+
+      if (src.type === "gridExtract") {
+        return (src.columnMappings || [])
+          .map(c => c?.header?.header)
+          .filter(Boolean);
+      }
+
+      if (src.type === "importData") {
+        return (src.columns || [])
+          .map(c => (typeof c === "string" ? c : c?.name))
+          .filter(Boolean);
+      }
+
+      return [];
+    })();
+
+// Walk up parents to find the first node that matches `predicate`.
+// Guards against accidental cycles and absurd depth.
+function findAncestor(steps, startId, predicate, maxHops = 20) {
+  const byId = new Map(steps.map(s => [s.id, s]));
+  const seen = new Set();
+  let hops = 0;
+  let id = startId;
+
+  while (id != null && hops < maxHops) {
+    if (seen.has(id)) break; // cycle guard
+    seen.add(id);
+
+    const node = byId.get(id);
+    if (!node) break;
+
+    if (predicate(node)) return node;
+
+    id = node.parentId;
+    hops += 1;
   }
-  if (src.type === "importData") {
-    return (src.columns || [])
-      .map(c => (typeof c === "string" ? c : c?.name))
-      .filter(Boolean);
-  }
-  return [];
-})(); 
+  return null;
+}
+
     return (
       <li
         key={step.id}
@@ -457,12 +676,6 @@ const columnsForThisStep = (() => {
         }`}
       >
         <div className="flex-1 pr-2 space-y-1">
-          {step.type === "navigate" && (
-            <div>
-              <span className="font-medium text-indigo-600">Navigate:</span>{" "}
-              <span className="text-gray-700">{step.url}</span>
-            </div>
-          )}
 
           {step.type === "uiAction" && (
             <div>
@@ -555,7 +768,8 @@ const columnsForThisStep = (() => {
                       ={` "${displayValue(step.value)}"`}
                     </button>
                   )
-                )}                {step.validationStatus === "failed" && (
+                )}                
+                {step.validationStatus === "failed" && (
                   <div className="inline-flex items-center ml-2 text-yellow-600 group relative">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -596,9 +810,7 @@ const columnsForThisStep = (() => {
             </div>
           )}
 
-          {(step.type === "loop" ||
-            step.type === "counterloop" ||
-            step.type === "dataLoop") && (
+          {isContainer(step) && (
             <div className="flex items-start space-x-2">
               <button
                 onClick={() => toggleExpand(step.id)}
@@ -607,29 +819,41 @@ const columnsForThisStep = (() => {
                 {expandedSteps[step.id] ? "[−]" : "[+]"}
               </button>
               <div className="flex-1 bg-green-50">
-                <div className="font-semibold text-green-700">
-                  {step.name || `Loop (${step.source || step.id})`}
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-purple-600">{badgeText(step.type)}</span>
+
+                  <span className="font-semibold text-green-700">
+                    {step.type === "navigate"
+                      ? (() => {
+                          const title = step.name || "Navigate";
+                          const url = step.url ? ` — ${step.url}` : "";
+                          return `${url}`;
+                        })()
+                      : (step.name || `Loop (${step.source || step.id})`)}
+                  </span>
                 </div>
 
+                {/* If this is the active (innermost) container */}
                 {isRecording && (
                   <div className="text-xs text-green-700 font-medium">
-                    🎤 Recording steps inside this loop…
-                  </div>
-                )}
-                {isFinalized && !isRecording && (
-                  <div className="text-xs text-gray-500 font-medium">
-                    ✅ Finalized – recording disabled
+                    🎤 Recording steps inside this {step.type === "navigate" ? "navigate" : "loop"}…
+                    <button
+                      onClick={stopContainerRecording}
+                      className="ml-2 text-red-600 underline"
+                      title={step.type === "navigate" ? "Finish Recording" : "Finish Loop Recording"}
+                    >
+                      {step.type === "navigate" ? "Finish Recording" : "Finish Loop Recording"}
+                    </button>
                   </div>
                 )}
 
-                {expandedSteps[step.id] &&
+                 {expandedSteps[step.id] &&
                   steps
                     .filter((s) => s.parentId === step.id)
                     .map((child) => renderStep(child, level + 1))}
               </div>
             </div>
           )}
-
 
           {step.type === "gridExtract" && (
             <div className="p-2 rounded border bg-green-50">
@@ -738,20 +962,6 @@ const columnsForThisStep = (() => {
             .map((step) => renderStep(step))}
         </ul>
 
-        {currentLoopId !== null && (
-          <div className="flex justify-between items-center mt-4 text-sm bg-green-50 border border-green-300 p-2 rounded">
-            <span className="text-green-800">
-              Recording inside loop:{" "}
-              <strong>
-                {steps.find((s) => s.id === currentLoopId)?.name || currentLoopId}
-              </strong>
-            </span>
-            <button onClick={stopLoopRecording} className="text-red-600 underline">
-              Finish Loop Recording
-            </button>
-          </div>
-        )}
-
         <div ref={scrollRef} className="mt-6 border-t pt-4">
           <h3 className="text-md font-semibold mb-2">Insert Smart Step</h3>
           <button
@@ -773,7 +983,7 @@ const columnsForThisStep = (() => {
         {showSmartWizard && (
           <Modal onClose={handleCancelWizard}>
             <SmartStepWizard
-              parentId={currentLoopId}
+              parentId={currentContainerId}
               pickedTarget={pickedTarget}
               onSmartStepCreated={handleSmartStepCreated}
               onCancel={handleCancelWizard}

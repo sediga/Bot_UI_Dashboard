@@ -84,6 +84,21 @@ const SMART_STEP_CONFIG = [
     ]
   },
   {
+    category: "Navigation",
+    emoji: "🧭",
+    steps: [
+      {
+        id: "navigate",
+        title: "Go to URL",
+        description: "Open a URL (supports {{row.Column}} inside loops).",
+        emoji: "🔗",
+        type: "navigate",
+        fields: ["stepName", "url", "target", "waitUntil", "timeoutMs"],
+        disabled: false
+      }
+    ]
+  },
+  {
     category: "Conditional",
     emoji: "🧠",
     steps: [

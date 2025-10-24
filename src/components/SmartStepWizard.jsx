@@ -6,6 +6,7 @@ import SMART_STEP_CONFIG from "../config/smartStepsConfig";
 import ExportDataWizard from "./smartsteps/ExportDataWizard"
 import { StepCard } from "./StepCard";
 import ImportDataStep from "./smartsteps/ImportDataStep";
+import NavigateStep from "./smartsteps/NavigateStep.jsx";
 
 export default function SmartStepWizard({
   parentId,
@@ -429,6 +430,19 @@ const handleFinish = () => {
     />
   );
 
+  const renderNavigate = () => (
+    <NavigateStep
+      availableExtractSteps={availableExtractSteps}
+      parentId={parentId}
+      onCreate={(step) => {
+        onSmartStepCreated(step);
+        onCancel();       // keep behavior consistent with other wizards
+      }}
+      onCancel={onCancel}
+      setStep={setStep}
+    />
+  );
+
   return (
     <div className="space-y-4 text-sm relative z-10">
       {step === 1 && renderStep1()}
@@ -453,6 +467,7 @@ const handleFinish = () => {
       {step === 2 && stepType === "loop-dataset" && renderLoopDataset()}
       {step === 2 && stepType === "export-data" && renderExportData()}
       {step === 2 && stepType === "import-excel" && renderImportExcelData()}
+      {step === 2 && stepType === "navigate" && renderNavigate()}
     </div>
   );
 }
