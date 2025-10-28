@@ -6,7 +6,6 @@ export default function TopBanner({ hideRibbon = true }) {
   const navigate = useNavigate();
   const ref = useRef(null);
 
-  // Measure header height (logo bar + ribbon) and expose as CSS var for page padding
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -51,10 +50,21 @@ export default function TopBanner({ hideRibbon = true }) {
             </div>
           </div>
 
-          <div className="flex gap-4">
+          {/* AUTH / CTAs */}
+          <div className="flex flex-wrap gap-3">
+            {/* NEW: Try as Guest (persistent nav) */}
+            <Link
+              to="/guest"
+              aria-label="Try Flowtra as Guest (no signup)"
+              className="px-4 py-2 rounded-lg font-medium border border-sky-300 text-sky-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+              title="Guest workspaces reset in 24 hours"
+            >
+              Try as Guest
+            </Link>
+
             <Link
               to="/login"
-              className="px-6 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition"
+              className="px-6 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-medium transition"
             >
               Log In
             </Link>
@@ -66,7 +76,7 @@ export default function TopBanner({ hideRibbon = true }) {
             </Link>
             <Link
               to="/docs"
-              className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium hover:bg-indigo-700 transition"
+              className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition"
             >
               Help Center
             </Link>
@@ -76,35 +86,51 @@ export default function TopBanner({ hideRibbon = true }) {
 
       {/* Design Partner ribbon (edge-to-edge, welcoming CTA) */}
       {!hideRibbon && (
-      <section className="w-full bg-gradient-to-r border-t border-slate-200">
-        <div className="mx-auto max-w-7xl px-2 py-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="text-center md:text-left">
-              <h2 className="text-base md:text-lg font-semibold text-slate-900">
-                Shape the future of Flowtra
-              </h2>
-              <p className="mt-0.5 text-slate-600 text-sm md:text-base">
-                We’re inviting early users and teams to join our Design Partner program. Get early access, help shape features, and enjoy priority support.
-              </p>
-            </div>
+        <section className="w-full bg-gradient-to-r border-t border-slate-200">
+          <div className="mx-auto max-w-screen-2xl px-2 py-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="text-center md:text-left">
+                <h2 className="text-base md:text-lg font-semibold text-slate-900">
+                  Shape the future of Flowtra
+                </h2>
+                <p className="mt-0.5 text-slate-600 text-sm md:text-base">
+                  We’re inviting early users and teams to join our Design Partner program. Get early access, help shape features, and enjoy priority support.
+                </p>
+              </div>
 
-            <div className="flex items-center gap-3">
-              <Link to="/join-design-partner"
-                aria-label="Join as Design Partner"
-                className="inline-flex items-center justify-center rounded-xl bg-sky-700 px-4 py-2 text-white text-sm md:text-base font-medium hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
-              >
-                Join as Design Partner
-              </Link>
-              <Link
-                to="/learn-more"
-                className="hidden md:inline text-sky-700 hover:text-sky-800 text-sm font-medium"
-              >
-                Learn more
-              </Link>
+              <div className="flex items-center gap-3">
+                {/* NEW: Guest is primary CTA on ribbon */}
+                <Link
+                  to="/guest"
+                  aria-label="Try Flowtra as Guest — no signup"
+                  className="inline-flex items-center justify-center rounded-xl bg-sky-600 hover:bg-sky-700 px-4 py-2 text-white text-sm md:text-base font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+                  title="Guest workspaces reset in 24 hours"
+                >
+                  Try as Guest — no signup
+                </Link>
+
+                <Link
+                  to="/join-design-partner"
+                  aria-label="Join as Design Partner"
+                  className="inline-flex items-center justify-center rounded-xl border border-sky-300 text-sky-700 bg-white hover:bg-sky-50 px-4 py-2 text-sm md:text-base font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+                >
+                  Join as Design Partner
+                </Link>
+
+                <Link
+                  to="/learn-more"
+                  className="hidden md:inline text-sky-700 hover:text-sky-800 text-sm font-medium"
+                >
+                  Learn more
+                </Link>
+              </div>
             </div>
+            {/* Optional microcopy under ribbon CTAs */}
+            <p className="mt-2 text-xs text-slate-500 text-center md:text-right">
+              Guest mode is sandboxed and resets on every session.
+            </p>
           </div>
-        </div>
-      </section>
+        </section>
       )}
     </div>
   );

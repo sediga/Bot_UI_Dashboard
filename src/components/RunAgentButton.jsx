@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { gaEvent } from "../utils/analytics";
 
 export default function RunAgentButton() {
   const [status, setStatus] = useState("idle");
@@ -26,6 +27,7 @@ export default function RunAgentButton() {
     link.click();
     document.body.removeChild(link);
     setStatus("downloaded");
+    gaEvent("aget_download");
   };
 
   useEffect(() => {

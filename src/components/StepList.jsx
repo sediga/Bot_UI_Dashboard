@@ -159,6 +159,15 @@ const replaceInSelector = (sel, literal, template) => {
   return s;
 };
 
+async function stopAgentNow() {
+  try {
+    await fetch(`${config.agentServerUrl}/api/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "no-active-containers" })
+    });
+  } catch {}
+}
 
 const withFilter = (tok, filter) =>
   typeof tok === "string" && tok.includes("{{") && !tok.includes("|")
@@ -523,6 +532,7 @@ const updateStep = (id, patch) =>
     const container = steps.find(s => s.id === topId);
     if (!container) {
       popContainer();
+      if (containerStack.length - 1 <= 0) await stopAgentNow(); // no more containers
       return true;
     }
 
@@ -551,6 +561,7 @@ const updateStep = (id, patch) =>
       try { if (isNav) await fetch(`${config.agentServerUrl}/api/overlay/hide`, { method: "POST" }); } catch {}
 
       popContainer();
+      if (containerStack.length - 1 <= 0) await stopAgentNow(); // no more containers
       return true;
     }
 
@@ -573,6 +584,7 @@ const updateStep = (id, patch) =>
     try { if (isNav) await fetch(`${config.agentServerUrl}/api/overlay/hide`, { method: "POST" }); } catch {}
 
     popContainer();
+    if (containerStack.length - 1 <= 0) await stopAgentNow(); // no more containers
     return true;
   };
     

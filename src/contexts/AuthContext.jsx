@@ -6,6 +6,29 @@ import config from "../config";
 
 const AuthContext = createContext();
 // const isLoggedOut = useRef(false);
+// Helpers to read JWT in multiple claim formats
+function decode(token) {
+  try { return jwtDecode(token); } catch { return null; }
+}
+function getUserIdFromPayload(p) {
+  return (
+    p?.sub ||
+    p?.nameid ||
+    p?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] ||
+    null
+  );
+}
+function getRolesFromPayload(p) {
+  const raw =
+    p?.roles ||
+    p?.role ||
+    p?.["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
+    [];
+  return Array.isArray(raw) ? raw : [raw].filter(Boolean);
+}
+function isGuestPayload(p) {
+  return getRolesFromPayload(p).includes("Guest");
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -20,26 +43,34 @@ export function AuthProvider({ children }) {
   const TIMEOUT_MS = 20 * 60 * 1000;
 
   const login = (token) => {
-  let userId = "0";
-  try {
-    const payload = jwtDecode(token);
-    userId =
-      payload[
-        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
-      ] || "0";
-  } catch (e) {
-    // bad token → clear any partial state and force a clean login
-    localStorage.removeItem("botflows_token");
-    localStorage.removeItem("botflows_userId");
-    return logout("Error");
-  }
+    const p = decode(token);
+    if (!p) {
+      localStorage.removeItem("botflows_token");
+      localStorage.removeItem("botflows_userId");
+      return logout("Error");
+    }
 
+    const userId = getUserIdFromPayload(p) || "0";
     localStorage.setItem("botflows_token", token);
     localStorage.setItem("botflows_userId", userId);
     localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
 
+    // If this is a guest token, synthesize a minimal user object
+    if (isGuestPayload(p)) {
+      setUser({
+        token,
+        userId,
+        roles: ["Guest"],
+        isGuest: true,
+        plan: "guest",
+      });
+      return;
+    }
+
+    // Real users: keep existing shape; /api/me will enrich it
     setUser((prev) => ({ ...(prev || {}), token, userId }));
   };
+
 
   const logout = (reason) => {
     // if (isLoggedOut.current) return;
@@ -118,6 +149,10 @@ export function AuthProvider({ children }) {
     const onFocus = () => {
       const token = localStorage.getItem("botflows_token");
       if (!token) return;
+
+      const p = decode(token);
+      if (p && isGuestPayload(p)) return; // guests don't refresh tokens
+
       try {
         const { exp } = jwtDecode(token);
         if (exp * 1000 - Date.now() < 5 * 60 * 1000) {
@@ -156,12 +191,26 @@ export function AuthProvider({ children }) {
   // Validate token on load
   useEffect(() => {
     const token = localStorage.getItem("botflows_token");
-    if (!token) {
+    if (!token) { setLoading(false); return; }
+
+    const p = decode(token);
+    const userId = localStorage.getItem("botflows_userId") || getUserIdFromPayload(p) || null;
+
+    // If guest → set user immediately and skip /api/me
+    if (p && isGuestPayload(p)) {
+      setUser({
+        token,
+        userId,
+        roles: ["Guest"],
+        isGuest: true,
+        plan: "guest",
+      });
       setLoading(false);
       return;
     }
 
-    const fetchUser = async () => {
+    // Real users → call /api/me
+    (async () => {
       try {
         const res = await fetch(`${config.apiBaseUrl}/api/me`, {
           credentials: "include",
@@ -174,29 +223,24 @@ export function AuthProvider({ children }) {
 
         if (res.ok) {
           const data = await res.json();
-          setUser((prev) => ({ ...(prev || {}), ...data }));
-         } else if (res.status === 401 || res.status === 403) {
-           // only clear tokens on real auth failure
-           localStorage.removeItem("botflows_token");
-           localStorage.removeItem("botflows_userId");
-           setUser(null);
-         } else {
-           // transient/server error: keep tokens; optionally log
-           console.warn("/api/me non-auth error:", res.status);
+          setUser((prev) => ({ ...(prev || {}), ...data, token, userId }));
+        } else if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem("botflows_token");
+          localStorage.removeItem("botflows_userId");
+          setUser(null);
+        } else {
+          console.warn("/api/me non-auth error:", res.status);
         }
       } catch (err) {
         console.error("Error fetching user", err);
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchUser();
+    })();
   }, []);
 
-  
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

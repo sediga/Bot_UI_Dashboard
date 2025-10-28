@@ -4,6 +4,7 @@ import config from "../config";
 import { useAuth } from "../contexts/AuthContext";
 import { getUpdateStatus } from "./agentUpdateClient";
 import AgentUpdateBanner from "./AgentUpdateBanner";
+import { parseJwt } from "../utils/auth";
 
 const ProtectedLayout = ({ children }) => {
   const { logout } = useAuth();
@@ -29,7 +30,23 @@ const ProtectedLayout = ({ children }) => {
       return;
     }
 
+    // detect guest and skip /api/me
+    const p = parseJwt(token);
+    const roles =
+      (p?.roles) ||
+      (p?.role) ||
+      (p?.["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"]) ||
+      [];
+    const roleList = Array.isArray(roles) ? roles : [roles].filter(Boolean);
+    const isGuest = roleList.includes("Guest");
+
     setLoading(false); // render right away
+
+    if (isGuest) {
+      // optional: show "Guest" in header
+      setEmail("Guest");
+      return; // <-- do not call /api/me or logout on 401
+    }
 
     let cancelled = false;
     (async () => {
@@ -58,9 +75,7 @@ const ProtectedLayout = ({ children }) => {
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [navigate, logout]);
 
   // Agent update check (on each login session)

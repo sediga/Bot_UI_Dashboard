@@ -7,6 +7,7 @@ import { jwtDecode } from "jwt-decode";
 import SectionWithBackground from "./SectionWithBackground";
 import TopBanner from "./TopBanner";
 import Footer from "../components/Footer";
+import { gaEvent } from "../utils/analytics";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -37,6 +38,7 @@ const Login = () => {
 
       const data = await res.json();
       login(data.token);
+      gaEvent("cta_click", { cta: "login" });
       navigate("/dashboard");
     } catch (err) {
       console.error("Google login failed:", err);
@@ -82,6 +84,7 @@ const Login = () => {
       const data = await res.json();
       // Save it
       login(data.token);
+      gaEvent("cta_click", { cta: "login" });
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);

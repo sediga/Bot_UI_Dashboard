@@ -4,6 +4,7 @@ import config from "../config";
 import SectionWithBackground from "./SectionWithBackground";
 import TopBanner from "./TopBanner";
 import Footer from "../components/Footer";
+import { gaEvent } from "../utils/analytics";
 
 const Signup = () => {
   const [email, setEmail] = useState("");
@@ -32,6 +33,7 @@ const Signup = () => {
         throw new Error(err.message || "Signup failed");
       }
       navigate("/login");
+      gaEvent("signup_complete");
     } catch (err) {
       setError(err.message);
     }

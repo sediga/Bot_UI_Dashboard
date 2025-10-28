@@ -11,7 +11,7 @@ import CreatePanel from "./CreatePanel";
 import ConfigurePanel from "./ConfigurePanel";
 import SectionWithBackground from "./SectionWithBackground";
 import RunsPanel from "./RunsPanel";
-
+import { gaEvent } from "../utils/analytics";
 
 export default function RecorderDashboard() {
   const [steps, setSteps] = useState([]);
