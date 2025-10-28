@@ -21,7 +21,7 @@ export default function BetaLaunchSections() {
       ),
       image: "/assets/slides/architecture_1.png",
       imageAlt: "Architecture diagram of Flowtra setup",
-      video: "/assets/slides/onboard/basic_flow/agent_install.mp4",
+      video: "/assets/slides/onboard/basic_flow/flowtra_agent_setup.mp4",
     },
     {
       title: "Smarter Browser Automation, Built for Real Life",
@@ -38,7 +38,7 @@ export default function BetaLaunchSections() {
       ),
       image: "/assets/slides/web-automation-flowchart.png", 
       imageAlt: "Screenshot of recording flow",
-      video: "/assets/slides/onboard/basic_flow/grid_export.mp4",
+      video: "/assets/slides/onboard/basic_flow/NPI export_with_cc.mp4",
     },
     {
       title: "Custom Bots. Built Just for You.",
@@ -109,7 +109,7 @@ export default function BetaLaunchSections() {
       ),
       image: "/assets/slides/secure.png", 
       imageAlt: "Security shield and privacy icons",
-      video: "/assets/slides/onboard/basic_flow/config_secure.mp4",
+      video: "/assets/slides/onboard/basic_flow/local_run.mp4",
     },
     {
       title: "Ready to Automate Smarter?",
