@@ -38,7 +38,7 @@ const Login = () => {
 
       const data = await res.json();
       login(data.token);
-      gaEvent("cta_click", { cta: "login" });
+      gaEvent("login_google");
       navigate("/dashboard");
     } catch (err) {
       console.error("Google login failed:", err);
@@ -84,7 +84,7 @@ const Login = () => {
       const data = await res.json();
       // Save it
       login(data.token);
-      gaEvent("cta_click", { cta: "login" });
+      gaEvent("login_email");
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);
