@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import config from "../config";
 import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
@@ -52,6 +52,10 @@ export default function StepBuilder({
   
   const seenSecretIdsRef = useRef(new Set());
   const llmRef = useRef(null);
+
+  const [showLoadPopup, setShowLoadPopup] = useState(false);
+  const [loadText, setLoadText] = useState("");
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     llmRef.current = makeSelectorLlmHelper({
@@ -520,21 +524,110 @@ const loadFlow = async (selectedFlow) => {
     }
   };
 
+    // === Load JSON helpers ===
+  const applyLoadedSteps = (arr) => {
+    if (!Array.isArray(arr)) throw new Error("Invalid flow JSON: expected an array of steps[]");
+    // clear then add
+    clearSteps();                    // you already have this
+    arr.forEach((s) => addStep(s));  // and this
+
+    // set URL from first navigate step (optional)
+    const firstNav = arr.find((s) => s.type?.toLowerCase?.() === "navigate" && s.url);
+    if (firstNav?.url) setUrlInput(firstNav.url); // assumes you have setUrlInput / urlInput state
+  };
+
+  const handleLoadFile = async (e) => {
+    try {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const text = await f.text();
+      const data = JSON.parse(text);
+      applyLoadedSteps(data);
+    } catch (err) {
+      console.error(err);
+      alert("Could not load this JSON file. Expected an array of steps.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleLoadFromText = () => {
+    try {
+      const data = JSON.parse(loadText);
+      applyLoadedSteps(data);
+      setShowLoadPopup(false);
+      setLoadText("");
+    } catch (err) {
+      console.error(err);
+      alert("Invalid JSON. Paste an array of steps.");
+    }
+  };
+
   return (
     <section className="flex-1 bg-gray-50 p-4 h-full min-h-0 flex flex-col">
       {/* Top static inputs */}
       <div className="space-y-4">
-        <div className="flex gap-2 items-center">
+        {/* URL row */}
+        <div className="w-full">
           <input
             type="text"
-            className="enterUrl border p-2 w-full rounded"
+            className="enterUrl border rounded w-full p-2"
             placeholder="Enter URL..."
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
           />
-          <button onClick={handleNavigate} className="record bg-blue-600 text-white px-3 py-2 rounded">Record</button>
-          <button onClick={() => setShowSavePopup(true)} className="bg-green-600 text-white px-3 py-2 rounded">Save</button>
-          <button onClick={handlePreviewReplay} className="bg-purple-600 text-white px-3 py-2 rounded">Preview</button>
+        </div>
+
+        {/* Buttons row moved BELOW the URL field */}
+        <div className="mt-3 flex flex-wrap gap-2 items-center">
+          <button
+            onClick={handleNavigate}
+            className="px-4 py-2 rounded bg-indigo-600 text-white"
+            title="Start/continue recording on the URL above"
+          >
+            Record
+          </button>
+
+          <button
+            onClick={() => setShowSavePopup(true)}
+            className="px-4 py-2 rounded bg-emerald-600 text-white"
+            title="Save current steps"
+          >
+            Save
+          </button>
+
+          <button
+            onClick={handlePreviewReplay}
+            className="px-4 py-2 rounded bg-purple-600 text-white"
+            title="Preview the current flow"
+          >
+            Preview
+          </button>
+
+          {/* NEW: Load from file */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-4 py-2 rounded bg-gray-800 text-white"
+            title="Load steps from a local JSON file"
+          >
+            Load
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleLoadFile}
+          />
+
+          {/* NEW: Paste JSON */}
+          <button
+            onClick={() => setShowLoadPopup(true)}
+            className="px-3 py-2 rounded border border-gray-300 text-gray-800 bg-white"
+            title="Paste JSON steps"
+          >
+            Paste JSON
+          </button>
         </div>
 
         <FlowSelector
@@ -562,6 +655,33 @@ const loadFlow = async (selectedFlow) => {
             <div className="flex gap-2 justify-end">
               <button onClick={handleSave} className="bg-green-600 text-white px-4 py-1 rounded">Save</button>
               <button onClick={() => setShowSavePopup(false)} className="bg-gray-400 text-white px-4 py-1 rounded">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showLoadPopup && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl w-[min(90vw,48rem)] p-4">
+            <div className="text-lg font-semibold mb-2">Load Steps from JSON</div>
+            <textarea
+              className="w-full h-64 border rounded p-2 font-mono text-sm"
+              value={loadText}
+              onChange={(e) => setLoadText(e.target.value)}
+              placeholder='Paste an array of steps, e.g. [{ "type": "navigate", "url": "https://..." }, ...]'
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setShowLoadPopup(false)}
+                className="px-3 py-2 rounded border"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLoadFromText}
+                className="px-3 py-2 rounded bg-indigo-600 text-white"
+              >
+                Load
+              </button>
             </div>
           </div>
         </div>
