@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 // but in this version we don't call any agent endpoint.
 import config from "../../config";
 
-export default function ImportDataStep({ token, onCancel, onSave }) {
+export default function ImportDataStep({ token, onCancel, onSave, mode="create", initial=null }) {
   const [file, setFile] = useState(null);
   const [format, setFormat] = useState(null); // "xlsx" | "csv"
   const [sheet, setSheet] = useState("");
@@ -20,6 +20,23 @@ export default function ImportDataStep({ token, onCancel, onSave }) {
   // NEW: the real path used at runtime by the agent/player
   const [agentPath, setAgentPath] = useState("");
 
+  useEffect(() => {
+    if (!initial) return;
+    setStepName(initial.stepName || "Import Data");
+    setAgentPath(initial.agentPath || "");
+    setOriginalName(initial.originalName || "");
+    setSheet(initial.sheet || "");
+    setHeaderRow(initial.headerRow || 1);
+    setFormat(initial.format || "xlsx");
+    if (Array.isArray(initial.columns) && initial.columns.length) {
+      setColumns(initial.columns.map(n => ({ name: n })));
+      setPreview({
+        columns: initial.columns,
+        rows: [], // optional; editing usually doesn’t need preview
+      });
+    }
+  }, [initial]);
+  
   function joinLike(dir, name) {
     if (!dir) return name;
     // if the user typed backslashes, prefer backslash; else use slash

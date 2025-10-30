@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
-const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep }) => {
+const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep, mode = "create", initial = null }) => {
+
 const defaultFolder =
   navigator.platform.startsWith("Win")
     ? "C:\\Users\\<you>\\Documents\\Flowtra\\exports"
@@ -16,6 +17,17 @@ const defaultFolder =
   const [stepName, setStepName] = useState("");
 
   const fakeFileRef = useRef();
+
+  useEffect(() => {
+    if (!initial) return;
+    setStepName(initial.stepName || "");
+    setSelectedSource(initial.selectedSource || "");
+    setFilename(initial.filename || "export.csv");
+    setFormat(initial.format || "csv");
+    setAppendTimestamp(!!initial.appendTimestamp);
+    setOverwrite(!!initial.overwrite);
+    if (Array.isArray(initial.selectedColumns)) setSelectedColumns(initial.selectedColumns);
+  }, [initial]);
 
   useEffect(() => {
     if (selectedSource) {

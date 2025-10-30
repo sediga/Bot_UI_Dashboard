@@ -1,5 +1,5 @@
 // StepList.jsx
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import SmartStepWizard from "./SmartStepWizard";
 import Modal from "./SmartStepModal";
 import config from "../config";
@@ -9,6 +9,8 @@ import SecretMapperModal from "./smartsteps/SecretMapperModal";
 import ValueWithMapper from "./smartsteps/ValueWithMapper";
 import { getLoopColumns } from "./smartsteps/getLoopColumns";
 import ColumnContextMenu from "./smartsteps/ColumnContextMenu";
+import StepEditorModal from "./StepEditorModal";
+import SmartStepEditModal from "./smartsteps/SmartStepEditModal";
 
 export default function StepList({
   steps,
@@ -26,6 +28,8 @@ export default function StepList({
   const [showParamModal, setShowParamModal] = useState(false);
   const [pendingStep, setPendingStep] = useState(null);
   const [loopColumns, setLoopColumns] = useState([]);
+  const [editingStepId, setEditingStepId] = useState(null);
+
   // const columns = getLoopColumns(flow, parentLoopStep);
 
   const [showSecretModal, setShowSecretModal] = useState(false);
@@ -40,6 +44,15 @@ const CONTAINER_TYPES = new Set(["loop", "dataLoop", "counterloop", "navigate"])
 const isContainer = (s) => !!s && CONTAINER_TYPES.has(s.type);
 
 const [containerStack, setContainerStack] = useState([]); // stack of step ids
+const handleCloseEditor = useCallback(() => setEditingStepId(null), []);
+const handleSaveEditor = useCallback((patched) => {
+  setSteps(prev =>
+    prev.map(s =>
+      s.id === editingStepId ? { ...s, ...patched, id: s.id, parentId: s.parentId } : s
+    )
+  );
+  setEditingStepId(null);
+}, [editingStepId, setSteps]);
 
 // derive current container from stack; fall back to prop for back-compat
 const currentContainerId = containerStack.length
@@ -951,6 +964,7 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
         </div>
 
         <div className="flex flex-col space-y-1 text-xs ml-2">
+          <button onClick={() => setEditingStepId(step.id)} className="text-blue-600 hover:text-blue-800">Edit</button>
           <button
             onClick={() =>
               step.parentId ? deleteSubStep(step) : deleteStep(step.id)
@@ -1055,7 +1069,32 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
               setShowSecretModal(false);
               setSecretCtx(null);
             }}          />
-        )}      
+        )}
+        {editingStepId && (
+          (() => {
+            const s = steps.find(st => st.id === editingStepId);
+            const SMART_TYPES = new Set([
+              "gridExtract","dataLoop","counterloop","exportData","importData","navigate"
+            ]);
+            return SMART_TYPES.has(s?.type)
+              ? (
+                  <SmartStepEditModal
+                    step={s}
+                    availableExtractSteps={steps.filter(x => ["gridExtract","importData"].includes(x.type))}
+                    onClose={handleCloseEditor}
+                    onSave={handleSaveEditor}
+                  />
+                )
+              : (
+                  <StepEditorModal
+                    step={s}
+                    onClose={handleCloseEditor}
+                    onSave={handleSaveEditor}
+                  />
+                );
+          })()        
+        )}        
+        
         <ColumnContextMenu
           open={columnMenu.open}
           x={columnMenu.x}
