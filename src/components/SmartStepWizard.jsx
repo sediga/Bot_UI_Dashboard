@@ -9,6 +9,7 @@ import NavigateStep from "./smartsteps/NavigateStep.jsx";
 import GridExtractWizard from "./smartsteps/GridExtractWizard";
 import CounterLoopWizard from "./smartsteps/CounterLoopWizard";
 import DataLoopWizard from "./smartsteps/DataLoopWizard";
+import ApiExtractWizard from "./smartsteps/ApiExtractWizard";
 
 export default function SmartStepWizard({
   parentId,
@@ -250,6 +251,17 @@ export default function SmartStepWizard({
     />
   );
 
+  const renderApiExtract = () => (
+        <ApiExtractWizard
+          mode="create"
+          onCreate={(payload) => {
+            onSmartStepCreated?.(payload);
+            onCancel?.();
+          }}
+          onCancel={() => setStep(1)}
+        />
+  );
+
   return (
     <div className="space-y-4 text-sm relative z-10">
       {step === 1 && renderStep1()}
@@ -277,6 +289,7 @@ export default function SmartStepWizard({
       {step === 2 && stepType === "export-data" && renderExportData()}
       {step === 2 && stepType === "import-excel" && renderImportExcelData()}
       {step === 2 && stepType === "navigate" && renderNavigate()}
+      {step === 2 && stepType === "api-extract" && (renderApiExtract())}
     </div>
   );
 }

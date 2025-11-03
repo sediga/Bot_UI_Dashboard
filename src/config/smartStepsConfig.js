@@ -14,16 +14,25 @@ const SMART_STEP_CONFIG = [
         disabled: false
       },
       {
-        id: "extract-api",
-        title: "From API (coming soon)",
-        description: "Extract data from a REST API (requires API URL and key)",
+        id: "api-extract",
+        title: "From API",
+        description: "Extract data from a REST API (requires API URL and key).",
         emoji: "🌐",
         type: "apiExtract",
-        fields: ["stepName", "url", "method", "headers", "body"],
-        agentMode: "target-pick",
-        disabled: true
+        // No target pick for API
+        fields: [
+          "stepName",
+          "url",
+          "method",
+          "headers",
+          "query",         // optional: key=value pairs
+          "body",          // for POST/PUT/PATCH
+          "responsePath",  // e.g. "$.data.items" or "data.items"
+          "columns"        // mapping: [{ header, path, type? }]
+        ],
+        disabled: false,
       },
-    {
+      {
       id: "import-excel",
       title: "Import Data",
       description: "Load rows from an Excel (.xlsx) or CSV file.",

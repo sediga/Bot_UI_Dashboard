@@ -14,17 +14,17 @@ const TEXT_OPS = [
 ];
 
 const COMP_OPS = [
-  { ui: ">",  tok: "gt"  },
-  { ui: "<",  tok: "lt"  },
-  { ui: ">=", tok: "gte" },
-  { ui: "<=", tok: "lte" },
-  { ui: "=",  tok: "equals" },
-  { ui: "!=", tok: "notEquals" },
+  { ui: ">",  tok: ">"  },
+  { ui: "<",  tok: "<"  },
+  { ui: ">=", tok: ">=" },
+  { ui: "<=", tok: "<=" },
+  { ui: "=",  tok: "=" },
+  { ui: "!=", tok: "!=" },
 ];
 
 const BOOL_OPS = [
-  { ui: "is true",  tok: "isTrue"  },
-  { ui: "is false", tok: "isFalse" },
+  { ui: "is true",  tok: "is true"  },
+  { ui: "is false", tok: "is false" },
 ];
 
 const OPS_BY_TYPE = {
@@ -77,11 +77,12 @@ function toUI(tok, type) {
 export default function FilterBuilder({ columns = [], filters = [], onFiltersChange }) {
   const normColumns = useMemo(() => columns.map(normalizeCol).filter(c => c.value), [columns]);
 
-  const [localFilters, setLocalFilters] = useState(
-    filters && filters.length
-      ? filters
-      : [{ column: "", operator: "", value: "", variable: "" }]
-  );
+  const [localFilters, setLocalFilters] = useState(filters, null);
+  // const [localFilters, setLocalFilters] = useState(
+  //   filters && filters.length
+  //     ? filters
+  //     : [{ column: "", operator: "", value: "", variable: "" }]
+  // );
 
   // Keep local state in sync with prop, not just by length
   useEffect(() => {
@@ -213,7 +214,7 @@ export default function FilterBuilder({ columns = [], filters = [], onFiltersCha
             )}
 
             {/* Remove */}
-            {localFilters.length > 1 && (
+            {localFilters.length > 0 && (
               <div className="text-right">
                 <button
                   className="text-red-600 font-bold"

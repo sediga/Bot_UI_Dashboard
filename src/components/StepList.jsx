@@ -34,143 +34,258 @@ export default function StepList({
 
   const [showSecretModal, setShowSecretModal] = useState(false);
   const [secretCtx, setSecretCtx] = useState(null);
-// near other useState calls
-const [editingValueStepId, setEditingValueStepId] = useState(null);
- const [columnMenu, setColumnMenu] = useState({
-   open: false, x: 0, y: 0, stepId: null, columns: []
- });
-// --- generic container model (any container can nest any container) ---
-const CONTAINER_TYPES = new Set(["loop", "dataLoop", "counterloop", "navigate"]);
-const isContainer = (s) => !!s && CONTAINER_TYPES.has(s.type);
-
-const [containerStack, setContainerStack] = useState([]); // stack of step ids
-const handleCloseEditor = useCallback(() => setEditingStepId(null), []);
-const handleSaveEditor = useCallback((patched) => {
-  setSteps(prev =>
-    prev.map(s =>
-      s.id === editingStepId ? { ...s, ...patched, id: s.id, parentId: s.parentId } : s
-    )
-  );
-  setEditingStepId(null);
-}, [editingStepId, setSteps]);
-
-// derive current container from stack; fall back to prop for back-compat
-const currentContainerId = containerStack.length
-  ? containerStack[containerStack.length - 1]
-  : (currentLoopId ?? null);
-
-const pushContainer = (id) => {
-  setContainerStack((prev) => [...prev, id]);
-  if (setCurrentLoopId) setCurrentLoopId(id); // keep external consumers in sync
-};
-
-const popContainer = () => {
-  setContainerStack((prev) => {
-    const next = prev.slice(0, -1);
-    if (setCurrentLoopId) setCurrentLoopId(next.length ? next[next.length - 1] : null);
-    return next;
+  // near other useState calls
+  const [editingValueStepId, setEditingValueStepId] = useState(null);
+  const [columnMenu, setColumnMenu] = useState({
+    open: false, x: 0, y: 0, stepId: null, columns: []
   });
-};
+  // --- generic container model (any container can nest any container) ---
+  const CONTAINER_TYPES = new Set(["loop", "dataLoop", "counterloop", "navigate"]);
+  const isContainer = (s) => !!s && CONTAINER_TYPES.has(s.type);
 
-// keep an input ref per step so we can insert at caret
-const valueInputRefs = useRef({});
+  const [containerStack, setContainerStack] = useState([]); // stack of step ids
+  const handleCloseEditor = useCallback(() => setEditingStepId(null), []);
+  const handleSaveEditor = useCallback((patched) => {
+    setSteps(prev =>
+      prev.map(s =>
+        s.id === editingStepId ? { ...s, ...patched, id: s.id, parentId: s.parentId } : s
+      )
+    );
+    setEditingStepId(null);
+  }, [editingStepId, setSteps]);
 
-// --- parameterize selectors helpers ---------------------------------------
-const isTemplate = (v) => typeof v === "string" && /\{\{.+\}\}/.test(v);
+  // derive current container from stack; fall back to prop for back-compat
+  const currentContainerId = containerStack.length
+    ? containerStack[containerStack.length - 1]
+    : (currentLoopId ?? null);
 
-// Regex-escape literal for safe replacement
-const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pushContainer = (id) => {
+    setContainerStack(prev => (prev.includes(id) ? prev : [...prev, id]));
+    if (setCurrentLoopId) setCurrentLoopId(id);
+  };
 
-// ---- selector param policies -------------------------------------------------
+  const popContainer = () => {
+    setContainerStack((prev) => {
+      const next = prev.slice(0, -1);
+      if (setCurrentLoopId) setCurrentLoopId(next.length ? next[next.length - 1] : null);
+      return next;
+    });
+  };
 
-// Actions where the *target element* is chosen by data
-const SELECTOR_PARAM_ACTIONS = new Set([
-  "setcheckbox", "togglecheckbox", "check", "uncheck",
-  "setradio", "selectradio",
-  "clickbytext", "clickoption", "chooseoption", "selectbytext",
-]);
+  // keep an input ref per step so we can insert at caret
+  const valueInputRefs = useRef({});
 
-// Actions where data is just injected into a known element (no selector templating)
- const VALUE_ONLY_ACTIONS = new Set([
-   "type", "fill", "input", "setvalue", "paste", "clear",
-   "upload", "settextarea", "setdate", "settime"
- ]);
+  // --- parameterize selectors helpers ---------------------------------------
+  const isTemplate = (v) => typeof v === "string" && /\{\{.+\}\}/.test(v);
 
-const TEXT_INPUT_TYPES = new Set([
-  "text","email","tel","search","password","number","date","datetime-local","time","url"
-]);
+  // Regex-escape literal for safe replacement
+  const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const isCheckboxOrRadio = (step) => {
-  const t = step?.signature?.attrs?.type?.toLowerCase?.() || "";
-  if (t === "checkbox" || t === "radio") return true;
-  const sel = step?.selector || "";
-  return /\binput\s*\[\s*type\s*=\s*["']?(checkbox|radio)["']?\s*\]/i.test(sel);
-};
+  // ---- selector param policies -------------------------------------------------
 
-// “Does the selector depend on the data?” => only then templatize
-const shouldTemplatizeSelector = (step) => {
-  if (!step || step.type !== "uiAction") return false;
+  // Actions where the *target element* is chosen by data
+  const SELECTOR_PARAM_ACTIONS = new Set([
+    "setcheckbox", "togglecheckbox", "check", "uncheck",
+    "setradio", "selectradio",
+    "clickbytext", "clickoption", "chooseoption", "selectbytext",
+  ]);
 
-  // explicit templates on the step mean “yes”
-  if (Array.isArray(step.selectorTemplates) && step.selectorTemplates.length) return true;
+  // Actions where data is just injected into a known element (no selector templating)
+  const VALUE_ONLY_ACTIONS = new Set([
+    "type", "fill", "input", "setvalue", "paste", "clear",
+    "upload", "settextarea", "setdate", "settime"
+  ]);
 
-  const a = (step.action || "").toLowerCase();
+  const TEXT_INPUT_TYPES = new Set([
+    "text","email","tel","search","password","number","date","datetime-local","time","url"
+  ]);
 
-  // Checkbox / radio are always label/value-driven
-  if (isCheckboxOrRadio(step)) return true;
+  const isCheckboxOrRadio = (step) => {
+    const t = step?.signature?.attrs?.type?.toLowerCase?.() || "";
+    if (t === "checkbox" || t === "radio") return true;
+    const sel = step?.selector || "";
+    return /\binput\s*\[\s*type\s*=\s*["']?(checkbox|radio)["']?\s*\]/i.test(sel);
+  };
 
-  // If the action is known to be selector-parametric
-  if (SELECTOR_PARAM_ACTIONS.has(a)) return true;
+  // “Does the selector depend on the data?” => only then templatize
+  const shouldTemplatizeSelector = (step) => {
+    if (!step || step.type !== "uiAction") return false;
 
-  // If selector clearly uses visible text to pick the node
-  if (/:has-text\(|:text\(/i.test(step.selector || "")) return true;
+    // explicit templates on the step mean “yes”
+    if (Array.isArray(step.selectorTemplates) && step.selectorTemplates.length) return true;
 
-  // If it's a plain text-entry kind of step, never templatize selector
-  if (VALUE_ONLY_ACTIONS.has(a)) return false;
+    const a = (step.action || "").toLowerCase();
 
-  // Text-ish inputs: value-only
-  const tag = step?.signature?.tagName?.toLowerCase?.() || "";
-  const type = step?.signature?.attrs?.type?.toLowerCase?.() || "";
-  if (tag === "input" && (TEXT_INPUT_TYPES.has(type) || type === "")) return false;
-  if (tag === "textarea") return false;
+    // Checkbox / radio are always label/value-driven
+    if (isCheckboxOrRadio(step)) return true;
 
-  return false;
-};
+    // If the action is known to be selector-parametric
+    if (SELECTOR_PARAM_ACTIONS.has(a)) return true;
+
+    // If selector clearly uses visible text to pick the node
+    if (/:has-text\(|:text\(/i.test(step.selector || "")) return true;
+
+    // If it's a plain text-entry kind of step, never templatize selector
+    if (VALUE_ONLY_ACTIONS.has(a)) return false;
+
+    // Text-ish inputs: value-only
+    const tag = step?.signature?.tagName?.toLowerCase?.() || "";
+    const type = step?.signature?.attrs?.type?.toLowerCase?.() || "";
+    if (tag === "input" && (TEXT_INPUT_TYPES.has(type) || type === "")) return false;
+    if (tag === "textarea") return false;
+
+    return false;
+  };
 
 
-// Conservatively replace the literal inside common selector patterns
-const replaceInSelector = (sel, literal, template) => {
-  if (!sel || !literal || !template) return sel;
-  let s = sel;
-  const FROM = escRe(String(literal));
+  // Conservatively replace the literal inside common selector patterns
+  const replaceInSelector = (sel, literal, template) => {
+    if (!sel || !literal || !template) return sel;
+    let s = sel;
+    const FROM = escRe(String(literal));
 
-  // since withFilter is a no-op, these are just `template`
-  const T_TEXT = withFilter(template, "text");
-  const T_CSS  = withFilter(template, "css");
+    // since withFilter is a no-op, these are just `template`
+    const T_TEXT = withFilter(template, "text");
+    const T_CSS  = withFilter(template, "css");
 
-  const rules = [
-    // Attribute equalities that carry identifiers/text -> use CSS escaping semantics
-    [new RegExp(`(\\[\\s*(?:value|name|placeholder|title)\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
-    [new RegExp(`(\\[\\s*for\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
-    [new RegExp(`(\\[\\s*id\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
-    [new RegExp(`(\\[\\s*data-[^\\]=]+\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+    const rules = [
+      // Attribute equalities that carry identifiers/text -> use CSS escaping semantics
+      [new RegExp(`(\\[\\s*(?:value|name|placeholder|title)\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+      [new RegExp(`(\\[\\s*for\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+      [new RegExp(`(\\[\\s*id\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
+      [new RegExp(`(\\[\\s*data-[^\\]=]+\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
 
-    // :has-text("…") / :text("…") -> use text semantics (fixed: no trailing ) in replacement)
-    [new RegExp(`(:has-text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
-    [new RegExp(`(:text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
+      // :has-text("…") / :text("…") -> use text semantics (fixed: no trailing ) in replacement)
+      [new RegExp(`(:has-text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
+      [new RegExp(`(:text\\(\\s*")${FROM}(")`, "gi"), `$1${T_TEXT}$2`],
 
-    // role=name regex contexts (keep regex wrapper, swap middle)
-    [new RegExp(`(\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
-    [new RegExp(`(role=\\w+\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
+      // role=name regex contexts (keep regex wrapper, swap middle)
+      [new RegExp(`(\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
+      [new RegExp(`(role=\\w+\\[\\s*name\\s*=\\s*"/\\^?)${FROM}((?:\\$)?/i?"\\])`, "gi"), `$1${template}$2`],
 
-    // General quoted fallback (default to text semantics)
-    [new RegExp(`(')${FROM}(')`, "g"), `$1${T_TEXT}$2`],
-    [new RegExp(`(")${FROM}(")`, "g"), `$1${T_TEXT}$2`],
-  ];
+      // General quoted fallback (default to text semantics)
+      [new RegExp(`(')${FROM}(')`, "g"), `$1${T_TEXT}$2`],
+      [new RegExp(`(")${FROM}(")`, "g"), `$1${T_TEXT}$2`],
+    ];
 
-  for (const [rx, rep] of rules) s = s.replace(rx, rep);
-  return s;
-};
+    for (const [rx, rep] of rules) s = s.replace(rx, rep);
+    return s;
+  };
+
+  // --- Continue Recording helpers ---------------------------------------------
+  const [resuming, setResuming] = useState(false);
+
+  const authHeader = () => {
+    // Pull from your existing storage key
+    const tok = localStorage.getItem("botflows_token") || "";
+    return tok.startsWith("Bearer ") ? tok : tok ? `Bearer ${tok}` : "";
+  };
+
+  // --- filter display helpers (place near other helpers) ---
+  const getHeaderText = (col) =>
+    typeof col === "string" ? col : (col?.header || col?.name || col?.key || "");
+
+  const fmtVal = (v) => Array.isArray(v) ? v.join(", ") : (v ?? "");
+
+  // Flatten in display order, preserving parent→children order
+  function flattenSteps(all) {
+    const byParent = new Map();
+    all.forEach(s => {
+      const pid = s.parentId ?? "__ROOT__";
+      if (!byParent.has(pid)) byParent.set(pid, []);
+      byParent.get(pid).push(s);
+    });
+
+    const out = [];
+    function walk(pid, level = 0) {
+      const kids = byParent.get(pid) || [];
+      for (const k of kids) {
+        out.push(k);
+        // containers recurse
+        if (isContainer(k)) walk(k.id, level + 1);
+      }
+    }
+    walk("__ROOT__");
+    return out;
+  }
+
+  // --- Finish Recording enablement (UI-only) -----------------------------------
+  const [finishEnabledIds, setFinishEnabledIds] = useState(new Set());
+
+  const topNavigateId = (allSteps) => {
+    const top = allSteps.filter(s => s.parentId == null);
+    const nav = top.find(s => String(s.type || "").toLowerCase() === "navigate");
+    return nav?.id || null;
+  };
+
+  const lastContainerIfTopLastIsContainer = (allSteps) => {
+    const top = allSteps.filter(s => s.parentId == null);
+    const last = top[top.length - 1];
+    return last && isContainer(last) ? last.id : null;
+  };
+
+  // Pick the *deepest last* actionable step as default stop target
+  function pickStopTarget(all) {
+    const flat = flattenSteps(all);
+    if (flat.length === 0) return { id: null, index: null };
+
+    // Prefer the last UI/action-ish step; otherwise the last step
+    const ACTION_TYPES = new Set([
+      "uiAction","navigate","dataLoop","counterloop","loop",
+      "gridExtract","importData","apiExtract","exportData"
+    ]);
+
+    for (let i = flat.length - 1; i >= 0; i--) {
+      const t = (flat[i].type || "").toLowerCase();
+      if (ACTION_TYPES.has(t)) return { id: flat[i].id, index: i };
+    }
+    return { id: flat[flat.length - 1].id, index: flat.length - 1 };
+  }
+
+  // Minimal flow payload similar to what you send to /api/replay today
+  function buildFlowForAgent() {
+    // If you already maintain a richer flow object elsewhere, swap this in.
+    return { steps: [...steps] };
+  }
+  const resetContainerStack = () => setContainerStack([]);
+
+  async function handleContinueRecordingClick() {
+    if (resuming) return;
+    setResuming(true);
+    try {
+      const res = await fetch(`${config.agentServerUrl}/api/continue-recording`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: authHeader() },
+        body: JSON.stringify(steps),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j?.ok === false) throw new Error(j?.error?.message || `HTTP ${res.status}`);
+
+      const navId = topNavigateId(steps);
+      const lastContId = lastContainerIfTopLastIsContainer(steps);
+
+      // containers we want to re-open
+      const orderedRaw = [navId, lastContId].filter(Boolean);
+      // IMPORTANT: un-finalize any we’re reopening
+      setFinalizedLoops(prev => {
+        const next = new Set(prev);
+        orderedRaw.forEach(id => next.delete(id));
+        return next;
+      });
+
+      // seed finish-enabled ids (now not filtered by finalized)
+      const ordered = Array.from(new Set(orderedRaw));
+      setFinishEnabledIds(new Set(ordered));
+
+      // rebuild the stack to match the reopening order
+      resetContainerStack();
+      ordered.forEach(pushContainer);
+    } catch (err) {
+      alert(`Resume failed: ${err.message || err}`);
+    } finally {
+      setResuming(false);
+    }
+  }
 
 async function stopAgentNow() {
   try {
@@ -434,7 +549,7 @@ const updateStep = (id, patch) =>
     }).catch((err) => console.error("Failed to notify agent on cancel:", err));
   };
 
-  const extractSteps = steps.filter((step) => ["gridExtract","importData"].includes(step.type));
+  const extractSteps = steps.filter((step) => ["gridExtract","importData","apiExtract"].includes(step.type));
   const canAddSmartStep =
     agentStatus === "recording" && !showSmartWizard;
 
@@ -462,6 +577,13 @@ const updateStep = (id, patch) =>
     if (containerStack.length && containerStack[containerStack.length - 1] === targetId) {
       await stopContainerRecording();
     }
+    setFinishEnabledIds(prev => {
+      if (!prev.size) return prev;
+      const next = new Set(prev);
+      next.delete(targetId);
+      return next;
+    });
+
   };
 
   const stopLoopRecording = async () => {
@@ -538,74 +660,146 @@ const updateStep = (id, patch) =>
 
   // --- stop current container (delete-if-empty or finalize), any type ---
   // returns true if stopped, false if user canceled
-  const stopContainerRecording = async () => {
-    const topId = containerStack[containerStack.length - 1];
-    if (!topId) return false;
+  // Pass the container id you want to close; defaults to top-of-stack
+  const stopContainerRecording = async (targetId) => {
+    // Snapshot to avoid reading stale state after async updates
+    const stack = [...containerStack];
+    const id = targetId ?? stack[stack.length - 1];
+    if (!id) return false;
 
-    const container = steps.find(s => s.id === topId);
-    if (!container) {
-      popContainer();
-      if (containerStack.length - 1 <= 0) await stopAgentNow(); // no more containers
-      return true;
-    }
-
-    const hasChildren = steps.some(s => s.parentId === container.id);
-    const isNav = container.type === "navigate";
-
-    if (!hasChildren) {
-      const ok = window.confirm(
-        `This ${isNav ? "navigate" : "loop"} has no recorded steps. It will be deleted. Proceed?`
-      );
-      if (!ok) return false;
-
-      // delete the empty container
-      const updated = steps.filter(s => s.id !== container.id && s.parentId !== container.id);
-      setSteps(updated);
-
+    // Helper: end a container on the agent (navigate vs loop)
+    const endOnAgent = async (step) => {
+      const isNav = step?.type === "navigate";
       try {
         if (isNav) {
           await fetch(`${config.agentServerUrl}/api/end-navigate-recording`, { method: "POST" });
+          try { await fetch(`${config.agentServerUrl}/api/overlay/hide`, { method: "POST" }); } catch {}
         } else {
           await fetch(`${config.agentServerUrl}/api/end-loop-recording`, { method: "POST" }).catch(() => {});
         }
       } catch (e) {
         console.error("Failed to end container recording", e);
       }
-      try { if (isNav) await fetch(`${config.agentServerUrl}/api/overlay/hide`, { method: "POST" }); } catch {}
+    };
 
-      popContainer();
-      if (containerStack.length - 1 <= 0) await stopAgentNow(); // no more containers
+    // If the requested id is not on the stack, just clean flags and bail
+    if (!stack.includes(id)) {
+      setFinishEnabledIds(prev => {
+        if (!prev.size) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      return false;
+    }
+
+    // Unwind inner containers until the target is on top
+    while (stack.length && stack[stack.length - 1] !== id) {
+      const innerId = stack.pop();
+      const inner = steps.find(s => s.id === innerId);
+      await endOnAgent(inner); // finalize inner recording on agent
+      // Reflect the pop in UI state
+      popContainer(); // your existing helper that pops top from state
+    }
+
+    // Now the target is on top
+    const container = steps.find(s => s.id === id);
+
+    // If somehow missing (deleted elsewhere), clear flags/stack and stop agent if needed
+    if (!container) {
+      setFinishEnabledIds(prev => {
+        if (!prev.size) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+
+      const willBeEmpty = stack.length <= 1;
+      popContainer(); // pop the (now-stale) top
+      if (willBeEmpty) await stopAgentNow();
       return true;
     }
 
-    // has children -> finalize
+    const isNav = container.type === "navigate";
+    const hasChildren = steps.some(s => s.parentId === container.id);
+
+    // No children → delete the empty container
+    if (!hasChildren) {
+      const ok = window.confirm(
+        `This ${isNav ? "navigate" : "loop"} has no recorded steps. It will be deleted. Proceed?`
+      );
+      if (!ok) return false;
+
+      // Remove container and any stale children just in case
+      const updated = steps.filter(s => s.id !== container.id && s.parentId !== container.id);
+      setSteps(updated);
+
+      await endOnAgent(container);
+
+      // Clear any finish-enable flags
+      setFinishEnabledIds(prev => {
+        if (!prev.size) return prev;
+        const next = new Set(prev);
+        next.delete(container.id);
+        return next;
+      });
+
+      // Pop the target and maybe stop agent if this was the last one
+      // after await endOnAgent(container)
+      const willBeEmpty = stack.length <= 1;
+      popContainer();
+      try {
+        if (willBeEmpty) await stopAgentNow();
+      } finally {
+        // belt & suspenders: if agent is still “recording” per your UI state,
+        // clear any stray finish flags so links don’t linger after stop.
+        if (willBeEmpty) {
+          setFinishEnabledIds(prev => {
+            if (!prev.size) return prev;
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }
+      }
+
+      return true;
+    }
+
+    // Has children → finalize but keep it in the step list
     setFinalizedLoops(prev => {
       const next = new Set(prev);
       next.add(container.id);
       return next;
     });
 
-    try {
-      if (isNav) {
-        await fetch(`${config.agentServerUrl}/api/end-navigate-recording`, { method: "POST" });
-      } else {
-        await fetch(`${config.agentServerUrl}/api/end-loop-recording`, { method: "POST" }).catch(() => {});
-      }
-    } catch (e) {
-      console.error("Failed to end container recording", e);
-    }
-    try { if (isNav) await fetch(`${config.agentServerUrl}/api/overlay/hide`, { method: "POST" }); } catch {}
+    await endOnAgent(container);
 
+    // Clear finish-enable flag now that it's finalized
+    setFinishEnabledIds(prev => {
+      if (!prev.size) return prev;
+      const next = new Set(prev);
+      next.delete(container.id);
+      return next;
+    });
+
+    // Pop the target we just finalized and stop agent if no containers remain
+    const willBeEmpty = stack.length <= 1;
     popContainer();
-    if (containerStack.length - 1 <= 0) await stopAgentNow(); // no more containers
+    if (willBeEmpty) await stopAgentNow();
     return true;
   };
     
   const pruneStackAgainst = (updatedSteps) => {
     const ids = new Set(updatedSteps.map(s => s.id));
     setContainerStack(prev => prev.filter(id => ids.has(id)));
+    setFinishEnabledIds(prev => {
+      if (!prev.size) return prev;
+      const next = new Set([...prev].filter(id => ids.has(id)));
+      return next;
+    });
     if (setCurrentLoopId) {
-      const top = [...ids].includes(currentContainerId) ? currentContainerId : null;
+      const top = ids.has(currentContainerId) ? currentContainerId : null;
       setCurrentLoopId(top);
     }
   };
@@ -641,6 +835,10 @@ const updateStep = (id, patch) =>
       step.parentId,
       (n) => n.type === "dataLoop"
     );
+    
+    const showFinishForThis = agentStatus === "recording" &&
+      !finalizedLoops.has(step.id) &&
+      (currentContainerId === step.id || finishEnabledIds.has(step.id));
 
     const columnsForThisStep = (() => {
       if (!dataLoopAncestor) return [];
@@ -664,32 +862,42 @@ const updateStep = (id, patch) =>
           .map(c => (typeof c === "string" ? c : c?.name))
           .filter(Boolean);
       }
+      // NEW: support API Extract as a data source for dataLoop
+      if (src.type === "apiExtract") {
+        return (src.columnMappings || [])
+          .map(c =>
+            typeof c?.header === "string"
+              ? c.header
+              : (c?.header?.header || c?.header?.name || c?.header?.key || "")
+          )
+          .filter(Boolean);
+      }
 
       return [];
     })();
 
-// Walk up parents to find the first node that matches `predicate`.
-// Guards against accidental cycles and absurd depth.
-function findAncestor(steps, startId, predicate, maxHops = 20) {
-  const byId = new Map(steps.map(s => [s.id, s]));
-  const seen = new Set();
-  let hops = 0;
-  let id = startId;
+    // Walk up parents to find the first node that matches `predicate`.
+    // Guards against accidental cycles and absurd depth.
+    function findAncestor(steps, startId, predicate, maxHops = 20) {
+      const byId = new Map(steps.map(s => [s.id, s]));
+      const seen = new Set();
+      let hops = 0;
+      let id = startId;
 
-  while (id != null && hops < maxHops) {
-    if (seen.has(id)) break; // cycle guard
-    seen.add(id);
+      while (id != null && hops < maxHops) {
+        if (seen.has(id)) break; // cycle guard
+        seen.add(id);
 
-    const node = byId.get(id);
-    if (!node) break;
+        const node = byId.get(id);
+        if (!node) break;
 
-    if (predicate(node)) return node;
+        if (predicate(node)) return node;
 
-    id = node.parentId;
-    hops += 1;
-  }
-  return null;
-}
+        id = node.parentId;
+        hops += 1;
+      }
+      return null;
+    }
 
     return (
       <li
@@ -815,7 +1023,7 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
                 className="text-blue-600 underline text-xs"
                 onClick={() => {
                   const gridStep = steps.find(
-                    (s) => s.type === "gridExtract" && s.parentId === step.Id
+                    (s) => s.type === "gridExtract" && s.parentId === step.id
                   );
                   const columns = gridStep?.columnMappings?.map((col) => col.header?.header) || [];
                   setLoopColumns(columns);
@@ -859,11 +1067,11 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
                 </div>
 
                 {/* If this is the active (innermost) container */}
-                {isRecording && (
+                {(isRecording || showFinishForThis) && (
                   <div className="text-xs text-green-700 font-medium">
                     🎤 Recording steps inside this {step.type === "navigate" ? "navigate" : "loop"}…
                     <button
-                      onClick={stopContainerRecording}
+                      onClick={() => stopContainerRecording(step.id)}
                       className="ml-2 text-red-600 underline"
                       title={step.type === "navigate" ? "Finish Recording" : "Finish Loop Recording"}
                     >
@@ -871,11 +1079,14 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
                     </button>
                   </div>
                 )}
+                
+                <ul className="space-y-2 text-sm">
 
                  {expandedSteps[step.id] &&
                   steps
                     .filter((s) => s.parentId === step.id)
                     .map((child) => renderStep(child, level + 1))}
+                </ul>
               </div>
             </div>
           )}
@@ -961,6 +1172,104 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
               )}
             </div>
           )}
+
+          {step.type === "apiExtract" && (
+            <div className="
+                rounded-2xl border border-gray-200 bg-white shadow-sm
+                p-4 md:p-5 text-sm
+              ">
+              {/* Header */}
+              <div className="flex items-center gap-2 mb-2">
+                <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium
+                                border-blue-200 text-blue-700 bg-blue-50">
+                  API Extract
+                </span>
+                {step.name && (
+                  <span className="text-gray-500 text-xs">( {step.name} )</span>
+                )}
+              </div>
+
+              {/* Meta grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-gray-500 text-xs">Method</div>
+                  <div className="font-medium">{step.request?.method || "GET"}</div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="text-gray-500 text-xs">URL</div>
+                  <div className="font-medium font-mono break-all">
+                    {step.request?.url}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-500 text-xs">Items Path</div>
+                  <div className="font-mono">{step.resultPath || "$.data"}</div>
+                </div>
+                {step.pagination?.mode && step.pagination.mode !== "none" && (
+                  <div>
+                    <div className="text-gray-500 text-xs">Pagination</div>
+                    <div className="font-mono">
+                      {step.pagination.mode === "page"
+                        ? `page=${step.pagination.param || "page"}, limit=${step.pagination.limitParam || "limit"}`
+                        : `cursorParam=${step.pagination.cursorParam || "cursor"}, cursorPath=${step.pagination.cursorPath || "$.nextCursor"}`}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Columns */}
+              {Array.isArray(step.columnMappings) && step.columnMappings.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-gray-700 font-semibold mb-2 text-sm">Mapped Columns</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-gray-500">
+                          <th className="py-1 pr-3">Header</th>
+                          <th className="py-1 pr-3">JSON Path</th>
+                          <th className="py-1">Type</th>
+                        </tr>
+                      </thead>
+                      <tbody className="align-top">
+                        {step.columnMappings.map((c, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="py-1 pr-3 font-medium">{c.header}</td>
+                            <td className="py-1 pr-3 font-mono break-all text-gray-700">{c.path}</td>
+                            <td className="py-1 text-gray-600">{c.type || "text"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Filters */}
+              {Array.isArray(step.filters) && step.filters.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-gray-700 font-semibold mb-2 text-sm">Filters</div>
+                  <ul className="list-disc pl-4 text-sm">
+                    {step.filters.map((f, idx) => (
+                      <li key={idx}>
+                        <span className="font-medium">{getHeaderText(f.column)}</span>{" "}
+                        <span className="text-gray-600">{f.operator}</span>{" "}
+                        <code className="font-mono">{fmtVal(f.value)}</code>
+                        {/* optional second value, e.g., between */}
+                        {f.value2 != null && (
+                          <>
+                            {" "}and{" "}
+                            <code className="font-mono">{fmtVal(f.value2)}</code>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+            </div>
+          )}
+       
         </div>
 
         <div className="flex flex-col space-y-1 text-xs ml-2">
@@ -1000,9 +1309,18 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
             Add Smart Step
           </button>
           {!canAddSmartStep && (
-            <p className="text-xs text-gray-500 mt-1">
-              Enable recording mode to insert new Smart Step.
-            </p>
+            <div ref={scrollRef} className="mt-6 border-t pt-4">
+              <button
+                disabled={resuming}
+                onClick={handleContinueRecordingClick}
+                className={`px-3 py-1 rounded text-white ${
+                  resuming ? "bg-gray-400 cursor-wait" : "bg-blue-600 hover:bg-blue-700"
+                }`}
+                title="Replays to your last step and re-enters record mode"
+              >
+                {resuming ? "Resuming…" : "Continue Recording"}
+              </button>
+            </div>
           )}
         </div>
 
@@ -1074,13 +1392,13 @@ function findAncestor(steps, startId, predicate, maxHops = 20) {
           (() => {
             const s = steps.find(st => st.id === editingStepId);
             const SMART_TYPES = new Set([
-              "gridExtract","dataLoop","counterloop","exportData","importData","navigate"
+              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract"
             ]);
             return SMART_TYPES.has(s?.type)
               ? (
                   <SmartStepEditModal
                     step={s}
-                    availableExtractSteps={steps.filter(x => ["gridExtract","importData"].includes(x.type))}
+                    availableExtractSteps={steps.filter(x => ["gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract"].includes(x.type))}
                     onClose={handleCloseEditor}
                     onSave={handleSaveEditor}
                   />

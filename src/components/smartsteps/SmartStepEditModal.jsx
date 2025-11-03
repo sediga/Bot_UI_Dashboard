@@ -7,6 +7,7 @@ import NavigateStep from "./NavigateStep";
 import GridExtractWizard from "./GridExtractWizard";
 import CounterLoopWizard from "./CounterLoopWizard";
 import DataLoopWizard from "./DataLoopWizard";
+import ApiExtractWizard from "./ApiExtractWizard";
 
 /**
  * SmartStepEditModal
@@ -174,6 +175,23 @@ export default function SmartStepEditModal({
           waitUntil: initial.waitUntil,
           timeoutMs: initial.timeoutMs,
         }}
+      />
+    );
+  } else if (type === "apiExtract") {
+    body = (
+      <ApiExtractWizard
+        mode="edit"
+        initial={{
+          id: step.id,
+          name: step.name,
+          request: step.request,
+          pagination: step.pagination,
+          resultPath: step.resultPath,
+          columnMappings: step.columnMappings,
+          filters: Array.isArray(step.filters) ? step.filters : [] 
+        }}
+        onCreate={(updated) => onSave({ ...step, ...updated, id: step.id, parentId: step.parentId })}
+        onCancel={onClose}
       />
     );
   }
