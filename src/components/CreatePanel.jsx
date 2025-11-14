@@ -173,7 +173,7 @@ export default function CreatePanel(props) {
         openCustomProtocolOnce(`flowtra://bootstrap?token=${encodeURIComponent(token)}`);
         startWaitingWindow(10000); // grace window
       }
-    }, 1000);
+    }, 2000);
 
     return () => {
       if (delayTimerRef.current) {
