@@ -3,7 +3,7 @@ import React from "react";
 const videos = [
   {
     id: "signup",
-    title: "Smart Step: API Extract",
+    title: "Getting Started: Sign Up and First Flow",
     url: "https://www.youtube.com/embed/qIYDk1huaKE",
     length: "~3 min",
     description:
@@ -12,7 +12,7 @@ const videos = [
   {
     id: "overview",
     title: "Flowtra Overview – CSV → Forms → Export",
-    url: "https://www.youtube.com/embed/12oF4La3bRU",
+    url: "https://www.youtube.com/embed/OJbDHkbgy_s",
     length: "~3 min",
     description:
       "End-to-end demo: import a CSV, loop over rows, search NPI, extract grid data and export."

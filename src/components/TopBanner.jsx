@@ -10,7 +10,10 @@ export default function TopBanner({ hideRibbon = true }) {
     const el = ref.current;
     if (!el) return;
     const apply = () =>
-      document.documentElement.style.setProperty("--header-offset", `${el.offsetHeight}px`);
+      document.documentElement.style.setProperty(
+        "--header-offset",
+        `${el.offsetHeight}px`
+      );
     apply();
     window.addEventListener("resize", apply);
     return () => window.removeEventListener("resize", apply);
@@ -40,26 +43,24 @@ export default function TopBanner({ hideRibbon = true }) {
                 <span className="text-5xl font-bold text-gray-800 tracking-tight leading-tight">
                   Flowtra<span className="text-indigo-500">.app</span>
                 </span>
-                <span className="bg-indigo-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                  BETA
-                </span>
+                {/* Removed BETA pill to avoid "toy beta" perception */}
               </div>
               <p className="text-gray-600 text-sm sm:text-base leading-tight mt-2">
-                Automate browser flows — no code required.
+                Automate payer and credentialing portals — no IT project
+                required.
               </p>
             </div>
           </div>
 
           {/* AUTH / CTAs */}
           <div className="flex flex-wrap gap-3">
-            {/* NEW: Try as Guest (persistent nav) */}
+            {/* Design Partner as primary nav CTA */}
             <Link
-              to="/guest"
-              aria-label="Try Flowtra as Guest (no signup)"
+              to="/join-design-partner"
+              aria-label="Learn about the Flowtra Design Partner program"
               className="px-4 py-2 rounded-lg font-medium border border-sky-300 text-sky-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
-              title="Guest workspaces reset in 24 hours"
             >
-              Try as Guest
+              Design Partner Program
             </Link>
 
             <Link
@@ -91,43 +92,48 @@ export default function TopBanner({ hideRibbon = true }) {
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="text-center md:text-left">
                 <h2 className="text-base md:text-lg font-semibold text-slate-900">
-                  Shape the future of Flowtra
+                  Automate your ugliest portal workflows
                 </h2>
                 <p className="mt-0.5 text-slate-600 text-sm md:text-base">
-                  We’re inviting early users and teams to join our Design Partner program. Get early access, help shape features, and enjoy priority support.
+                  We’re working with a small number of billing and credentialing
+                  teams to automate high-volume portal work like NPI lookups,
+                  CAQH checks, and payer status sweeps. Design Partners get
+                  hands-on setup, priority support, and locked-in pricing.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
-                {/* NEW: Guest is primary CTA on ribbon */}
-                <Link
-                  to="/guest"
-                  aria-label="Try Flowtra as Guest — no signup"
-                  className="inline-flex items-center justify-center rounded-xl bg-sky-600 hover:bg-sky-700 px-4 py-2 text-white text-sm md:text-base font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
-                  title="Guest workspaces reset in 24 hours"
-                >
-                  Try as Guest — no signup
-                </Link>
-
+              <div className="flex flex-col sm:flex-row items-center gap-3 mt-4 md:mt-0">
+                {/* Primary: Join Design Partner Program */}
                 <Link
                   to="/join-design-partner"
-                  aria-label="Join as Design Partner"
-                  className="inline-flex items-center justify-center rounded-xl border border-sky-300 text-sky-700 bg-white hover:bg-sky-50 px-4 py-2 text-sm md:text-base font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+                  aria-label="Join the Flowtra Design Partner program"
+                  className="inline-flex items-center justify-center rounded-full bg-sky-600 px-6 py-2.5 text-sm md:text-base font-semibold text-white shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
                 >
-                  Join as Design Partner
+                  Join Design Partner Program
                 </Link>
 
+                {/* Secondary: Sandbox demo */}
+                <Link
+                  to="/guest"
+                  aria-label="Try Flowtra in sandbox mode"
+                  className="inline-flex items-center justify-center rounded-full border border-sky-300 bg-white px-6 py-2.5 text-sm md:text-base font-semibold text-sky-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+                  title="Guest workspaces reset in 24 hours"
+                >
+                  View sandbox demo
+                </Link>
+
+                {/* Tertiary: Learn more */}
                 <Link
                   to="/learn-more"
-                  className="hidden md:inline text-sky-700 hover:text-sky-800 text-sm font-medium"
+                  className="text-sm font-medium text-sky-700 hover:text-sky-800"
                 >
                   Learn more
                 </Link>
               </div>
             </div>
-            {/* Optional microcopy under ribbon CTAs */}
+            {/* Microcopy under ribbon CTAs */}
             <p className="mt-2 text-xs text-slate-500 text-center md:text-right">
-              Guest mode is sandboxed and resets on every session.
+              Guest mode runs in a sandbox and resets on every session.
             </p>
           </div>
         </section>
