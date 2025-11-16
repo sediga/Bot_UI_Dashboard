@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import FeatureCarousel from "./demo/FeatureCarousel";
-import BetaLaunchSections from "./BetaLaunchSections";
+import LaunchSections from "./LaunchSections";
 import SectionWithBackground from "./SectionWithBackground";
 import TopBanner from "./TopBanner";
 import Footer from "./Footer"; 
@@ -12,7 +12,7 @@ const Landing = () => {
       <SectionWithBackground>
         <TopBanner hideRibbon={false} />
 
-        <BetaLaunchSections />
+        <LaunchSections />
 
       </SectionWithBackground>
       <Footer />

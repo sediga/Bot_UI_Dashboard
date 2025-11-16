@@ -1,13 +1,15 @@
+// pages/JoinDesignPartnerPage.jsx
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import TopBanner from "../components/TopBanner";
 import Footer from "../components/Footer";
 import SectionWithBackground from "../components/SectionWithBackground";
 import config from "../config";
 
+// Join as Design Partner — standalone page component
 export default function JoinDesignPartnerPage() {
   const [state, setState] = useState({ loading: false, ok: false, err: "" });
-  const token = localStorage.getItem("botflows_token"); // or from your auth context
+  const token = localStorage.getItem("botflows_token");
 
   const utm = useMemo(() => {
     if (typeof window === "undefined") return {};
@@ -35,21 +37,14 @@ export default function JoinDesignPartnerPage() {
     }
 
     // Basic required fields
-    const required = ["name", "email", "use_case", "consent"];
-    const labels = {
-      name: "Full name",
-      email: "Work email",
-      use_case: "What you would like to automate first",
-      consent: "Consent to be contacted",
-    };
-
+    const required = ["name", "email", "consent"];
     for (const key of required) {
       const v = fd.get(key);
       if (!v || (key === "consent" && v !== "on")) {
         setState({
           loading: false,
           ok: false,
-          err: `Please complete: ${labels[key]}.`,
+          err: `Please complete the required field: ${key}.`,
         });
         return;
       }
@@ -108,19 +103,20 @@ export default function JoinDesignPartnerPage() {
             <section className="bg-gradient-to-b from-slate-50 to-white">
               <div className="mx-auto max-w-7xl px-6 py-12 md:py-16">
                 <h1 className="text-3xl md:text-3xl font-semibold tracking-tight leading-tight">
-                  Apply to be a Flowtra Design Partner
+                  Get started as a Flowtra Design Partner
                   <span className="inline-block ml-2 px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 rounded-full align-middle">
+                    Not sure yet?&nbsp;
                     <Link to="/learn-more" className="underline">
-                      Learn more
+                      Learn more about the Design Partner program
                     </Link>
                   </span>
                 </h1>
                 <p className="mt-4 text-slate-600 text-lg max-w-3xl">
-                  This is a paid early-access program for healthcare revenue
-                  cycle and credentialing teams who want to automate high-volume
-                  portal work like NPI lookups, CAQH checks, and payer status
-                  sweeps. Tell us a bit about your workflows and we’ll confirm
-                  whether the program is a good fit.
+                  This cohort is for healthcare teams and products that depend on external
+                  portals — payer, NPI, CAQH, and vendor dashboards for devices, transcripts,
+                  and scheduling. Tell us about the workflows you’d like to automate. We’ll
+                  design and run your first production flow as a free pilot, then agree on a
+                  simple ongoing plan if it’s clearly saving your team time.
                 </p>
               </div>
             </section>
@@ -143,7 +139,7 @@ export default function JoinDesignPartnerPage() {
                       required
                       type="text"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                      placeholder="Jane Doe"
+                      placeholder="Ada Lovelace"
                     />
                   </Field>
                   <Field label="Work email" required>
@@ -152,7 +148,7 @@ export default function JoinDesignPartnerPage() {
                       required
                       type="email"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                      placeholder="you@billinggroup.com"
+                      placeholder="you@company.com"
                     />
                   </Field>
                 </div>
@@ -163,7 +159,7 @@ export default function JoinDesignPartnerPage() {
                       name="company"
                       type="text"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                      placeholder="Your organization name"
+                      placeholder="Org name (optional)"
                     />
                   </Field>
                   <Field label="Role">
@@ -171,7 +167,7 @@ export default function JoinDesignPartnerPage() {
                       name="role"
                       type="text"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                      placeholder="RCM Director, Credentialing Lead…"
+                      placeholder="Ops Lead, Founder, Analyst…"
                     />
                   </Field>
                   <Field label="Website">
@@ -190,7 +186,7 @@ export default function JoinDesignPartnerPage() {
                       name="portals"
                       type="text"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                      placeholder="NPI registry, CAQH, payer portals…"
+                      placeholder="e.g., payer portal, NPI, CAQH, vendor portal"
                     />
                   </Field>
                   <Field label="Team size">
@@ -209,16 +205,12 @@ export default function JoinDesignPartnerPage() {
                   </Field>
                 </div>
 
-                <Field
-                  label="What would you like to automate first?"
-                  required
-                >
+                <Field label="What would you like to automate first?">
                   <textarea
                     name="use_case"
                     rows={4}
-                    required
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                    placeholder="For example: weekly NPI checks for new providers; nightly payer claim status sweeps; monthly CAQH roster review…"
+                    placeholder="Describe your workflow, the portals involved, what your team does today, and what a 'win' would look like."
                   />
                 </Field>
 
@@ -228,7 +220,7 @@ export default function JoinDesignPartnerPage() {
                       name="industry"
                       type="text"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                      placeholder="Healthcare RCM, Credentialing…"
+                      placeholder="Healthcare, RCM, SaaS product, etc."
                     />
                   </Field>
                   <Field label="Timeline">
@@ -240,7 +232,7 @@ export default function JoinDesignPartnerPage() {
                       <option>ASAP</option>
                       <option>This month</option>
                       <option>Next quarter</option>
-                      <option>Researching</option>
+                      <option>Just exploring</option>
                     </select>
                   </Field>
                   <Field label="How did you hear about us?">
@@ -248,7 +240,7 @@ export default function JoinDesignPartnerPage() {
                       name="hear_about"
                       type="text"
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                      placeholder="Referral, LinkedIn, search, etc."
+                      placeholder="Friend, LinkedIn, search, etc."
                     />
                   </Field>
                 </div>
@@ -258,7 +250,7 @@ export default function JoinDesignPartnerPage() {
                     name="notes"
                     rows={3}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-sky-600/10"
-                    placeholder="Security constraints, PHI considerations, data formats, success metrics…"
+                    placeholder="Constraints, security needs, existing bots, fragile workflows, or success metrics…"
                   />
                 </Field>
 
@@ -270,8 +262,7 @@ export default function JoinDesignPartnerPage() {
                       className="mt-1 h-4 w-4 rounded border-slate-300"
                     />
                     <span className="text-sm text-slate-700">
-                      We may need an NDA for detailed workflow or data review.
-                      I am open to signing one.
+                      Happy to sign an NDA if needed
                     </span>
                   </label>
                   <label className="flex items-start gap-3">
@@ -282,8 +273,7 @@ export default function JoinDesignPartnerPage() {
                       className="mt-1 h-4 w-4 rounded border-slate-300"
                     />
                     <span className="text-sm text-slate-700">
-                      I agree to be contacted about the Design Partner program
-                      and related Flowtra updates.
+                      I agree to be contacted about the Design Partner cohort and related updates.
                     </span>
                   </label>
                 </div>
@@ -299,7 +289,7 @@ export default function JoinDesignPartnerPage() {
                     disabled={state.loading}
                     className="rounded-xl bg-sky-700 px-5 py-3 text-white font-medium hover:bg-sky-600 disabled:opacity-60"
                   >
-                    {state.loading ? "Submitting…" : "Submit application"}
+                    {state.loading ? "Submitting…" : "Get started as a Design Partner"}
                   </button>
                   {state.err && (
                     <span className="text-sm text-rose-600">{state.err}</span>
@@ -346,13 +336,10 @@ function SuccessScreen() {
           <SectionWithBackground>
             <TopBanner />
             <div className="text-center mx-auto max-w-2xl px-6 py-56 md:py-64">
-              <div className="text-3xl font-semibold">
-                Thanks for your application.
-              </div>
+              <div className="text-3xl font-semibold">Thanks for getting started!</div>
               <p className="mt-3 text-slate-600">
-                We received your details and will get back to you shortly with
-                next steps. If we need more information about your workflows,
-                we’ll reach out by email.
+                We received your details and will reach out shortly to review your workflows
+                and confirm whether this cohort is a good fit. Keep an eye on your inbox.
               </p>
               <div className="mt-6 flex items-center justify-center gap-3">
                 <Link
@@ -370,8 +357,6 @@ function SuccessScreen() {
               </div>
             </div>
           </SectionWithBackground>
-
-          {/* Footer row — override ONLY here to cancel its internal mt-10 */}
           <div className="[&>footer]:mt-0">
             <Footer />
           </div>
