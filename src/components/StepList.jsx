@@ -1468,7 +1468,7 @@ const updateStep = (id, patch) =>
               ? (
                   <SmartStepEditModal
                     step={s}
-                    availableExtractSteps={steps.filter(x => ["gridExtract","apiExtract","keyValueExtract","keyValueCollect"].includes(x.type))}
+                    availableExtractSteps={steps.filter(x => ["gridExtract","apiExtract","importData","keyValueExtract","keyValueCollect"].includes(x.type))}
                     onClose={handleCloseEditor}
                     onSave={handleSaveEditor}
                   />
