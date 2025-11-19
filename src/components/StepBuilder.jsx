@@ -22,7 +22,8 @@ export default function StepBuilder({
   setLogs,
   rawMessages,
   setRawMessages,
-  eventBus
+  eventBus,
+  sessionDatasets
 }) {
   const [status, setStatus] = useState("idle");
   const [urlInput, setUrlInput] = useState("");

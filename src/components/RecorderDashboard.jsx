@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { useRef } from "react";
-import StepBuilder from "./StepBuilder";
-import StepList from "./StepList";
 import ReplayPanel from "./ReplayPanel";
 import config from "../config";
 import Header from "./Header";
@@ -31,6 +29,7 @@ export default function RecorderDashboard() {
   const [recordMessages, setRecordMessages] = useState([]);
   const activeTabRef = useRef(activeTab);
   const eventBusRef = useRef(new EventTarget()); // 🔹 new
+  const [sessionDatasets, setSessionDatasets] = useState({});
 
   const [runTour, setRunTour] = useState(() => {
     return localStorage.getItem("botflows_tour_skipped") !== "true";
@@ -249,6 +248,22 @@ export default function RecorderDashboard() {
         catch { raw = (channel === "log") ? String(event.data) : null; }
         if (!raw) return;
         if (typeof raw === "object") raw._recv = ++recvSeqRef.current; // stable tiebreaker
+        //
+        // 🔥 Structured replayComplete event
+        //
+        if (raw && typeof raw === "object" && raw.type === "log") {
+          const msg = raw.payload?.message;
+          if (msg && typeof msg === "object" && msg.type === "replayComplete") {
+            console.log("Replay complete received with datasets:", msg.datasets);
+            setSessionDatasets(msg.datasets || {});
+            setRecordMessages(prev => [
+              ...prev,
+              { type: "status", message: msg.message || "Replay completed" }
+            ]);
+            return;
+          }
+        }
+
          // Idempotent: ensure a socket exists and is connected; no promises, no locks.
          if (channel === "event") {
           if (isNoiseEvent(raw) && !raw.action && !raw.eventId) return;
@@ -451,6 +466,7 @@ export default function RecorderDashboard() {
             leftPanelRef={leftPanelRef}
             startResizing={startResizing}
             eventBus={eventBusRef.current}
+            sessionDatasets={sessionDatasets}
           />
         )}
 

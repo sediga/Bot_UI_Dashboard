@@ -11,6 +11,7 @@ import { getLoopColumns } from "./smartsteps/getLoopColumns";
 import ColumnContextMenu from "./smartsteps/ColumnContextMenu";
 import StepEditorModal from "./StepEditorModal";
 import SmartStepEditModal from "./smartsteps/SmartStepEditModal";
+import DatasetPreview from "./DatasetPreview";
 
 export default function StepList({
   steps,
@@ -19,7 +20,8 @@ export default function StepList({
   setPickedTarget,
   agentStatus,
   currentLoopId,
-  setCurrentLoopId
+  setCurrentLoopId,
+  sessionDatasets
 }) {
   const [expandedSteps, setExpandedSteps] = useState({});
   const [showSmartWizard, setShowSmartWizard] = useState(false);
@@ -1142,6 +1144,30 @@ const updateStep = (id, patch) =>
                   ))}
                 </div>
               )}
+              {(() => {
+                if (!sessionDatasets) return null;
+
+                // Debug logging (safe, won’t break JSX)
+                const keys = Object.keys(sessionDatasets);
+                console.log("[StepList/importData] dataset keys:", keys);
+                console.log("[StepList/importData] step.id:", step.id);
+
+                // Try a few ways to resolve the matching dataset
+                const idKey     = step.id;
+                const stringKey = String(step.id);
+                const nameKey   = step.name && keys.includes(step.name) ? step.name : null;
+
+                const dataset =
+                  sessionDatasets[idKey] ??
+                  sessionDatasets[stringKey] ??
+                  (nameKey ? sessionDatasets[nameKey] : null);
+
+                if (!dataset || !Array.isArray(dataset.rows) || dataset.rows.length === 0) {
+                  return null;
+                }
+
+                return <DatasetPreview data={dataset.rows} />;
+              })()}
             </div>
           )}
 
@@ -1186,6 +1212,7 @@ const updateStep = (id, patch) =>
                 ))}
               </ul>
             </div>
+            
           )}
 
           {step.type === "exportData" && (
@@ -1455,7 +1482,7 @@ const updateStep = (id, patch) =>
                 );
           })()        
         )}        
-        
+
         <ColumnContextMenu
           open={columnMenu.open}
           x={columnMenu.x}
