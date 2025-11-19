@@ -14,6 +14,26 @@ const SMART_STEP_CONFIG = [
         disabled: false
       },
       {
+        id: "extract-keyvalue",
+        title: "From Key–Value Section",
+        description:
+          "Extract labeled values from a details panel or summary section.",
+        emoji: "🏷️",
+        type: "keyValueExtract",
+        fields: ["stepName", "containerSelector", "fields"],
+        disabled: false,
+      },
+      {
+        id: "collect-keyvalue",
+        title: "Collect Multiple Key–Value Blocks",
+        description: "Extract repeated key–value panels or cards from a page.",
+        emoji: "📋",
+        type: "keyValueCollect",
+        fields: ["stepName", "containerSelector", "itemSelector", "fields"],
+        agentMode: "target-pick",
+        disabled: false
+      },
+      {
         id: "api-extract",
         title: "From API",
         description: "Extract data from a REST API (requires API URL and key).",

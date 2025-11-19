@@ -232,7 +232,7 @@ export default function StepList({
     // Prefer the last UI/action-ish step; otherwise the last step
     const ACTION_TYPES = new Set([
       "uiAction","navigate","dataLoop","counterloop","loop",
-      "gridExtract","importData","apiExtract","exportData"
+      "gridExtract","importData","apiExtract","exportData", "keyValueExtract", "keyValueCollect"
     ]);
 
     for (let i = flat.length - 1; i >= 0; i--) {
@@ -549,7 +549,7 @@ const updateStep = (id, patch) =>
     }).catch((err) => console.error("Failed to notify agent on cancel:", err));
   };
 
-  const extractSteps = steps.filter((step) => ["gridExtract","importData","apiExtract"].includes(step.type));
+  const extractSteps = steps.filter((step) => ["gridExtract","importData","apiExtract", "keyValueExtract", "keyValueCollect"].includes(step.type));
   const canAddSmartStep =
     agentStatus === "recording" && !showSmartWizard;
 
@@ -1124,6 +1124,49 @@ const updateStep = (id, patch) =>
             </div>
           )}
 
+          {step.type === "keyValueExtract" && (
+            <div>
+              <span className="font-medium text-sky-700">Key–value extract</span>{" "}
+              →{" "}
+              <span className="text-slate-700">
+                {step.label || "Key–value fields"}
+              </span>
+
+              {Array.isArray(step.config?.pairs) && step.config.pairs.length > 0 && (
+                <div className="mt-1 text-xs text-slate-500 space-y-0.5">
+                  {step.config.pairs.map((p, idx) => (
+                    <div key={idx}>
+                      {p.label || p.key || `Field ${idx + 1}`}{" "}
+                      <code>{p.valueSelector || "(value selector)"}</code>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step.type === "keyValueCollect" && (
+            <div>
+              <span className="font-medium text-sky-700">Key–value collect</span>{" "}
+              →{" "}
+              <span className="text-slate-700">
+                {step.name || "Collected key–value items"}
+              </span>
+
+              {/* Show field definitions */}
+              {Array.isArray(step.fields) && step.fields.length > 0 && (
+                <div className="mt-1 text-xs text-slate-500 space-y-0.5">
+                  {step.fields.map((f, idx) => (
+                    <div key={idx}>
+                      {f.label || f.key || `Field ${idx + 1}`}{" "}
+                      <code>{f.valueSelector || "(value selector)"}</code>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {step.type === "importData" && (
             <div className="p-2 rounded border bg-green-50">
               <div className="font-semibold text-green-700">
@@ -1398,7 +1441,7 @@ const updateStep = (id, patch) =>
               ? (
                   <SmartStepEditModal
                     step={s}
-                    availableExtractSteps={steps.filter(x => ["gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract"].includes(x.type))}
+                    availableExtractSteps={steps.filter(x => ["gridExtract","apiExtract","keyValueExtract","keyValueCollect"].includes(x.type))}
                     onClose={handleCloseEditor}
                     onSave={handleSaveEditor}
                   />
