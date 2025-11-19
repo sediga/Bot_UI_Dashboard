@@ -33,6 +33,14 @@ const videos = [
     description:
       "Use API-based data sources instead of UI scraping, and feed them into loops."
   },
+  {
+    id: "npiSearchAndExtract",
+    title: "Automating NPI & Portal Workflows",
+    url: "https://www.youtube.com/embed/_Nf64ecPV0s",
+    length: "~3 min",
+    description:
+      "Step-by-step demos showing how Flowtra turns repetitive NPI lookups and portal workflows into reliable browser automations. Watch how we import CSVs, loop through NPIs, extract provider details, export clean datasets, and plug them back into your own systems."
+  },
   // add more videos here as you publish them
 ];
 
