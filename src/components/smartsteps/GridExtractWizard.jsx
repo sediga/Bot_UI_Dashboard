@@ -19,7 +19,7 @@ export default function GridExtractWizard({
   const [stepName, setStepName] = useState(initial?.stepName || "");
   const [selectedColumns, setSelectedColumns] = useState(initial?.selectedColumns || []);
   const [filters, setFilters] = useState(initial?.filters || []);
-
+  const [datasetId, setDatasetId] = useState(initial?.datasetId || "");
   // --- target picking (edit only) -------------------------------------------
   const [isPicking, setIsPicking] = useState(false);
 
@@ -157,6 +157,7 @@ const handleSave = async () => {
     selectors: { grid: gridSelector, row: rowSelector },
     columnMappings,
     filters: filters || [],
+    datasetId: datasetId || undefined,
   };
 
   if (isPicking) {
@@ -223,11 +224,22 @@ const handleSave = async () => {
         <div>
           <div className="font-semibold mb-2">Step Name</div>
           <input
-            className="w-full border px-2 py-1 rounded"
-            placeholder="e.g., Extract Patients"
+            className="w-full border px-2 py-1 rounded mb-3"
+            placeholder="e.g., Extract PFS Fees"
             value={stepName}
             onChange={(e) => setStepName(e.target.value)}
           />
+
+          <div className="font-semibold mb-1">Dataset name (optional)</div>
+          <input
+            className="w-full border px-2 py-1 rounded"
+            placeholder="e.g., pfs_fees"
+            value={datasetId}
+            onChange={(e) => setDatasetId(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            If set, rows will be stored under this dataset and can be exported or looped later.
+          </p>
         </div>
       </div>
 

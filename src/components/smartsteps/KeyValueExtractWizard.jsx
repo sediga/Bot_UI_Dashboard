@@ -26,7 +26,7 @@ export default function KeyValueExtractWizard({
           },
         ]
   );
-
+  const [datasetId, setDatasetId] = useState(initial?.datasetId || "");
   // per-row test status: { [index]: { status, value?, message? } }
   const [testStates, setTestStates] = useState({});
 
@@ -94,6 +94,7 @@ export default function KeyValueExtractWizard({
       },
       fields: normalizedFields,
       headers: normalizedFields.map((f) => f.key),
+      datasetId: datasetId || undefined,
     };
 
     if (parentId) {
@@ -189,14 +190,26 @@ export default function KeyValueExtractWizard({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block font-medium mb-1">Step name</label>
+          <div className="font-semibold mb-2">Step Name</div>
           <input
-            className="w-full border rounded px-2 py-1"
-            placeholder="e.g. Extract Details"
+            className="w-full border px-2 py-1 rounded mb-3"
+            placeholder="e.g., Extract PFS Fees"
             value={stepName}
             onChange={(e) => setStepName(e.target.value)}
           />
+
+          <div className="font-semibold mb-1">Dataset name (optional)</div>
+          <input
+            className="w-full border px-2 py-1 rounded"
+            placeholder="e.g., pfs_fees"
+            value={datasetId}
+            onChange={(e) => setDatasetId(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            If set, rows will be stored under this dataset and can be exported or looped later.
+          </p>
         </div>
+
 
         <div>
           <label className="block font-medium mb-1">

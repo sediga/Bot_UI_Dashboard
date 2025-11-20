@@ -11,7 +11,8 @@ const SMART_STEP_CONFIG = [
         type: "gridExtract",
         fields: ["stepName", "columns", "filters"],
         agentMode: "target-pick",
-        disabled: false
+        disabled: false,
+        datasetId: "datasetName" 
       },
       {
         id: "extract-keyvalue",
@@ -22,6 +23,7 @@ const SMART_STEP_CONFIG = [
         type: "keyValueExtract",
         fields: ["stepName", "containerSelector", "fields"],
         disabled: false,
+        datasetId: "datasetName" 
       },
       {
         id: "collect-keyvalue",
@@ -51,6 +53,7 @@ const SMART_STEP_CONFIG = [
           "columns"        // mapping: [{ header, path, type? }]
         ],
         disabled: false,
+        datasetId: "datasetName" 
       },
       {
       id: "import-excel",
@@ -59,7 +62,8 @@ const SMART_STEP_CONFIG = [
       emoji: "📥",
       type: "importData",
       fields: ["stepName", "file", "format", "sheet", "headerRow", "columns"],
-      disabled: false
+      disabled: false,
+      datasetId: "datasetName" 
     }
     ]
   },

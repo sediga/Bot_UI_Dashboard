@@ -47,14 +47,32 @@ export default function StepList({
 
   const [containerStack, setContainerStack] = useState([]); // stack of step ids
   const handleCloseEditor = useCallback(() => setEditingStepId(null), []);
-  const handleSaveEditor = useCallback((patched) => {
-    setSteps(prev =>
-      prev.map(s =>
-        s.id === editingStepId ? { ...s, ...patched, id: s.id, parentId: s.parentId } : s
-      )
-    );
-    setEditingStepId(null);
-  }, [editingStepId, setSteps]);
+  const handleSaveEditor = useCallback(
+    (patched) => {
+      if (!patched || patched.id == null) {
+        console.warn("handleSaveEditor called without an id:", patched);
+        setEditingStepId(null);
+        return;
+      }
+
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.id === patched.id
+            ? {
+                ...s,
+                ...patched,
+                // never let an edit accidentally change identity/parent
+                id: s.id,
+                parentId: s.parentId,
+              }
+            : s
+        )
+      );
+
+      setEditingStepId(null);
+    },
+    [setSteps]
+  );
 
   // derive current container from stack; fall back to prop for back-compat
   const currentContainerId = containerStack.length
@@ -221,9 +239,12 @@ export default function StepList({
   };
 
   const lastContainerIfTopLastIsContainer = (allSteps) => {
-    const top = allSteps.filter(s => s.parentId == null);
-    const last = top[top.length - 1];
-    return last && isContainer(last) ? last.id : null;
+    const flat = flattenSteps(allSteps);
+    // Walk from the end backwards and pick the last container
+    for (let i = flat.length - 1; i >= 0; i--) {
+      if (isContainer(flat[i])) return flat[i].id;
+    }
+    return null;
   };
 
   // Pick the *deepest last* actionable step as default stop target
@@ -1101,6 +1122,12 @@ const updateStep = (id, patch) =>
               <div className="text-xs text-gray-600 mb-2">
                 <strong>ID:</strong> <code>{step.id}</code>
               </div>
+              {step.datasetId && (
+                <div className="text-xs text-gray-600 mb-1">
+                  <strong>Dataset:</strong> <code>{step.datasetId}</code>
+                </div>
+              )}
+
               <ul className="text-sm list-disc pl-4 mb-2">
                 {step.columnMappings?.map((col) => (
                   <li key={col.header?.header}>
@@ -1157,9 +1184,14 @@ const updateStep = (id, patch) =>
                 const stringKey = String(step.id);
                 const nameKey   = step.name && keys.includes(step.name) ? step.name : null;
 
+                const dsKey = step.datasetId && keys.includes(step.datasetId)
+                  ? step.datasetId
+                  : null;
+
                 const dataset =
                   sessionDatasets[idKey] ??
                   sessionDatasets[stringKey] ??
+                  (dsKey ? sessionDatasets[dsKey] : null) ??
                   (nameKey ? sessionDatasets[nameKey] : null);
 
                 if (!dataset || !Array.isArray(dataset.rows) || dataset.rows.length === 0) {

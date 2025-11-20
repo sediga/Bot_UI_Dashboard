@@ -137,11 +137,24 @@ function StepEditorModalInner({ step, onClose, onSave }) {
 
   const commitJson = () => {
     try {
+      // Treat the JSON as a *patch* on top of the current draft,
+      // not a full replacement. This means you can omit fields like
+      // `type`, `url`, etc. and they will be preserved.
       const parsed = JSON.parse(jsonBuf.current || "{}");
-      const locked = lockImmutableFields(parsed, step);
-      const v = validate(locked);
-      if (v) return setError(v);
-      onSave(locked);
+
+      // Shallow merge patch onto the current draft
+      const merged = { ...draft, ...parsed };
+
+      // Still lock immutable fields (type/url/action/id/parentId)
+      // const locked = lockImmutableFields(merged, step);
+
+      const v = validate(merged);
+      if (v) {
+        setError(v);
+        return;
+      }
+
+      onSave(merged);
     } catch (e) {
       setError("JSON parse error: " + e.message);
     }
