@@ -51,6 +51,7 @@ export default function SmartStepEditModal({
           },
           selectedColumns: (step.columnMappings || []).map((c) => toHeader(c.header)),
           filters: step.filters || [],
+          filterLogic: step.filterLogic || "AND",
         };
       }
       case "counterloop":

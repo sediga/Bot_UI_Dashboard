@@ -9,17 +9,26 @@ function headerText(h) {
 }
 
 export default function GridExtractWizard({
-  mode = "create",                 // "create" | "edit"
-  initial = null,                  // { stepName, gridMeta:{gridSelector,rowSelector,columnHeaders?,columnMappings?}, selectedColumns, filters }
-  pickedTarget,                    // used when editing and re-picking
-  onCreate,                        // (payload) => void
+  mode = "create", // "create" | "edit"
+  initial = null,  // { stepName, gridMeta:{gridSelector,rowSelector,columnHeaders?,columnMappings?}, selectedColumns, filters, filterLogic }
+  pickedTarget,    // used when editing and re-picking
+  onCreate,        // (payload) => void
   onCancel,
 }) {
   const [gridMeta, setGridMeta] = useState(initial?.gridMeta || null);
-  const [stepName, setStepName] = useState(initial?.stepName || "");
-  const [selectedColumns, setSelectedColumns] = useState(initial?.selectedColumns || []);
+  const [stepName, setStepName] = useState(initial?.stepName || initial?.name || "");
+  const [selectedColumns, setSelectedColumns] = useState(
+    initial?.selectedColumns ||
+      (initial?.columnMappings
+        ? initial.columnMappings.map((m) =>
+            typeof m.header === "string" ? m.header : headerText(m.header)
+          )
+        : [])
+  );
   const [filters, setFilters] = useState(initial?.filters || []);
   const [datasetId, setDatasetId] = useState(initial?.datasetId || "");
+  const [filterLogic, setFilterLogic] = useState(initial?.filterLogic || "AND"); // NEW
+
   // --- target picking (edit only) -------------------------------------------
   const [isPicking, setIsPicking] = useState(false);
 
@@ -41,8 +50,10 @@ export default function GridExtractWizard({
       // normalize meta shape we use downstream
       const normalized = {
         gridSelector: meta.gridSelector,
-        rowSelector: meta.rowSelector || (meta.itemSelector ? `${meta.gridSelector} ${meta.itemSelector}` : undefined),
-        columnHeaders: meta.columnHeaders,   // [{ header, type? }] if the agent provides types
+        rowSelector:
+          meta.rowSelector ||
+          (meta.itemSelector ? `${meta.gridSelector} ${meta.itemSelector}` : undefined),
+        columnHeaders: meta.columnHeaders, // [{ header, type? }] if the agent provides types
         columnMappings: meta.columnMappings, // optional richer info from agent
       };
       setGridMeta(normalized);
@@ -55,116 +66,129 @@ export default function GridExtractWizard({
   useEffect(() => {
     return () => {
       // on unmount, ensure pick mode is closed
-      if (isPicking) fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
+      if (isPicking)
+        fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
     };
   }, [isPicking]);
 
   // --- columns for UI (ensure correct types) --------------------------------
   // Prefer saved mapping types, then typedColumns, then plain headers as text.
   const columnsForFilters = useMemo(() => {
-    const cm = (gridMeta?.columnMappings || []);
+    const cm = gridMeta?.columnMappings || [];
     const mapByHeader = new Map(
-      cm.map(m => {
+      cm.map((m) => {
         const h = headerText(m.header);
         return [h, m];
       })
     );
 
     const headers =
-      (gridMeta?.columnHeaders && gridMeta.columnHeaders.length
+      gridMeta?.columnHeaders && gridMeta.columnHeaders.length
         ? gridMeta.columnHeaders
         : cm.length
-          ? cm.map(m => ({ header: headerText(m.header), type: m.type }))
-          : []);
+        ? cm.map((m) => ({ header: headerText(m.header), type: m.type }))
+        : [];
 
     // if still nothing, keep it empty (user hasn’t picked yet)
-    return headers.map(h => {
+    return headers.map((h) => {
       const name = headerText(h);
       const m = mapByHeader.get(name);
       return {
         header: name,
-        type: (m?.type) || (h?.type) || "text",   // this fixes npi_type -> img
+        type: m?.type || h?.type || "text", // this fixes npi_type -> img
       };
     });
   }, [gridMeta]);
 
   // Select-all checkbox
-  const allSelected = selectedColumns.length > 0
-    && columnsForFilters.every(c => selectedColumns.includes(c.header));
+  const allSelected =
+    selectedColumns.length > 0 &&
+    columnsForFilters.every((c) => selectedColumns.includes(c.header));
   const toggleAll = (checked) => {
-    setSelectedColumns(checked ? columnsForFilters.map(c => c.header) : []);
+    setSelectedColumns(checked ? columnsForFilters.map((c) => c.header) : []);
   };
   const toggleOne = (name) => {
-    setSelectedColumns(prev =>
-      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    setSelectedColumns((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
   };
 
   // --- Save -----------------------------------------------------------------
-const handleSave = async () => {
-  if (!gridMeta?.gridSelector) return;
+  const handleSave = async () => {
+    if (!gridMeta?.gridSelector) return;
 
-  const gridSelector = gridMeta.gridSelector;
-  const rowSelector =
-    gridMeta.rowSelector || `${gridSelector} div[role='row']`;
+    const gridSelector = gridMeta.gridSelector;
+    const rowSelector =
+      gridMeta.rowSelector || `${gridSelector} div[role='row']`;
 
-  // helpers
-  const original = gridMeta?.columnMappings || [];
-  const nameOf = (h) =>
-    typeof h === "string"
-      ? h
-      : (h?.header || h?.name || h?.key || h?.field || "");
+    // helpers
+    const original = gridMeta?.columnMappings || [];
+    const nameOf = (h) =>
+      typeof h === "string"
+        ? h
+        : h?.header || h?.name || h?.key || h?.field || "";
 
-  const originalByHeader = new Map(original.map((m) => [nameOf(m.header), m]));
-  const originalOrder     = original.map((m) => nameOf(m.header));
+    const originalByHeader = new Map(original.map((m) => [nameOf(m.header), m]));
+    const originalOrder = original.map((m) => nameOf(m.header));
 
-  // if you computed types for filters, reuse them; otherwise default to "text"
-  const typeByHeader = new Map(
-    (columnsForFilters || []).map((c) => [c.header, c.type || "text"])
-  );
+    // if you computed types for filters, reuse them; otherwise default to "text"
+    const typeByHeader = new Map(
+      (columnsForFilters || []).map((c) => [c.header, c.type || "text"])
+    );
 
-  // ✅ Save headers in object form so StepList sees header.header
-  const columnMappings = selectedColumns.map((colName) => {
-    const existing = originalByHeader.get(colName);
-    const type     = typeByHeader.get(colName) || existing?.type || "text";
-    const index    =
-      existing?.index != null ? existing.index : Math.max(0, originalOrder.indexOf(colName));
+    // ✅ Save headers in object form so StepList sees header.header
+    const columnMappings = selectedColumns.map((colName) => {
+      const existing = originalByHeader.get(colName);
+      const type = typeByHeader.get(colName) || existing?.type || "text";
+      const index =
+        existing?.index != null
+          ? existing.index
+          : Math.max(0, originalOrder.indexOf(colName));
 
-    // if we already had an object header, keep it; else create one
-    const headerObj =
-      typeof existing?.header === "object"
-        ? existing.header
-        : { header: colName };
+      // if we already had an object header, keep it; else create one
+      const headerObj =
+        typeof existing?.header === "object"
+          ? { ...existing.header }
+          : { header: colName };
 
-    return {
-      ...existing,
-      // Store object-style header for StepList compatibility
-      header: headerObj,
-      // (Optional) keep a plain string too if other code relies on it
-      headerText: colName,
-      index,
-      type,
+      // 🔑 ensure type is visible on header for the player (numeric filters etc.)
+      if (!headerObj.type) {
+        headerObj.type = type;
+      }
+
+      return {
+        ...existing,
+        // Store object-style header for StepList compatibility
+        header: headerObj,
+        // (Optional) keep a plain string too if other code relies on it
+        headerText: colName,
+        index,
+        type,
+      };
+    });
+
+    // keep filters as-is; you’re not changing FilterBuilder
+    const payload = {
+      id: initial?.id || `extractStep_${Date.now()}`,
+      type: "gridExtract",
+      name: stepName,
+      gridSelector,
+      rowSelector,
+      selectors: { grid: gridSelector, row: rowSelector },
+      columnMappings,
+      filters: filters || [],
+      filterLogic: filterLogic || "AND", // NEW: persist match mode
+      datasetId: datasetId || undefined,
+      gridMeta: gridMeta || undefined,
+      selectedColumns,
+      stepName,
     };
-  });
 
-  // keep filters as-is; you’re not changing FilterBuilder
-  const payload = {
-    id: initial?.id || `extractStep_${Date.now()}`,
-    type: "gridExtract",
-    name: stepName,
-    gridSelector,
-    rowSelector,
-    selectors: { grid: gridSelector, row: rowSelector },
-    columnMappings,
-    filters: filters || [],
-    datasetId: datasetId || undefined,
+    if (isPicking) {
+      await fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
+    }
+    onCreate?.(payload);
   };
-
-  if (isPicking) {
-    await fetch(`${config.agentServerUrl}/api/target-pick-done`, { method: "POST" });
-  }
-  onCreate?.(payload);
-};
 
   // --- UI -------------------------------------------------------------------
   return (
@@ -195,7 +219,7 @@ const handleSave = async () => {
         </div>
       </div>
 
-      {/* Step name */}
+      {/* Step name + columns */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <div className="font-semibold mb-2">Select Columns</div>
@@ -245,10 +269,24 @@ const handleSave = async () => {
 
       {/* Filters */}
       <div>
-        <div className="font-semibold mb-2">Filters</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-semibold">Filters</div>
+          <div className="flex items-center gap-2 text-xs text-gray-600">
+            <span>Match</span>
+            <select
+              className="border px-1 py-0.5 rounded"
+              value={filterLogic}
+              onChange={(e) => setFilterLogic(e.target.value)}
+            >
+              <option value="AND">all filters (AND)</option>
+              <option value="OR">any filter (OR)</option>
+            </select>
+          </div>
+        </div>
+
         <FilterBuilder
           // Provide type info so UI shows (img), date ops, etc.
-          columns={columnsForFilters.map(c => ({ header: c.header, type: c.type }))}
+          columns={columnsForFilters.map((c) => ({ header: c.header, type: c.type }))}
           filters={filters}
           onFiltersChange={setFilters}
         />
@@ -258,7 +296,9 @@ const handleSave = async () => {
       {isPicking && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow p-6 w-[min(92vw,26rem)] text-center space-y-3">
-            <div className="text-lg font-semibold">Now click on the grid on the page…</div>
+            <div className="text-lg font-semibold">
+              Now click on the grid on the page…
+            </div>
             <button
               type="button"
               className="text-sm text-red-600 underline"
@@ -274,12 +314,20 @@ const handleSave = async () => {
       )}
 
       <div className="flex justify-between mt-4">
-        <button type="button" onClick={onCancel} className="text-sm text-gray-600">← Back</button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-sm text-gray-600"
+        >
+          ← Back
+        </button>
         <button
           type="button"
           className="bg-green-600 text-white px-4 py-1 rounded"
           onClick={handleSave}
-          disabled={!gridMeta?.gridSelector || !selectedColumns.length || !stepName.trim()}
+          disabled={
+            !gridMeta?.gridSelector || !selectedColumns.length || !stepName.trim()
+          }
         >
           {mode === "edit" ? "Save Changes" : "Save Step"}
         </button>

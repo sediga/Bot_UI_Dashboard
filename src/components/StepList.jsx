@@ -1128,6 +1128,16 @@ const updateStep = (id, patch) =>
                 </div>
               )}
 
+              {/* NEW: show how filters are combined (AND / OR) */}
+              {step.filters?.length > 0 && (
+                <div className="text-xs text-gray-600 mb-2">
+                  <strong>Match:</strong>{" "}
+                  {step.filterLogic === "OR"
+                    ? "any filter (OR)"
+                    : "all filters (AND)"}
+                </div>
+              )}
+
               <ul className="text-sm list-disc pl-4 mb-2">
                 {step.columnMappings?.map((col) => (
                   <li key={col.header?.header}>
