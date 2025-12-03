@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 
-const ExportDataWizard = ({ availableExtractSteps, onCreate, onCancel, setStep, mode = "create", initial = null }) => {
+const ExportDataWizard = ({
+  availableExtractSteps = [],
+  onCreate,
+  onTest,
+  onCancel,
+  setStep,
+  mode = "create",
+  initial = null,
+}) => {
+  const defaultFolder =
+    navigator.platform.startsWith("Win")
+      ? "C:\\Users\\<you>\\Documents\\Flowtra\\exports"
+      : "/Users/<you>/Flowtra/exports";
 
-const defaultFolder =
-  navigator.platform.startsWith("Win")
-    ? "C:\\Users\\<you>\\Documents\\Flowtra\\exports"
-    : "/Users/<you>/Flowtra/exports";
   const [selectedSource, setSelectedSource] = useState("");
   const [filename, setFilename] = useState(`export.csv`);
   const [format, setFormat] = useState("csv");
@@ -18,25 +26,63 @@ const defaultFolder =
 
   const fakeFileRef = useRef();
 
+  // Unique datasetIds from previous extract steps
+  const datasetOptions = Array.from(
+    new Set(
+      (availableExtractSteps || [])
+        .map((s) => s.datasetId)
+        .filter(Boolean)
+    )
+  );
+
   useEffect(() => {
     if (!initial) return;
-    setStepName(initial.stepName || "");
-    setSelectedSource(initial.selectedSource || "");
+    setStepName(initial.stepName || initial.name || "");
+    setSelectedSource(initial.selectedSource || initial.source || "");
     setFilename(initial.filename || "export.csv");
     setFormat(initial.format || "csv");
     setAppendTimestamp(!!initial.appendTimestamp);
     setOverwrite(!!initial.overwrite);
-    if (Array.isArray(initial.selectedColumns)) setSelectedColumns(initial.selectedColumns);
+    if (Array.isArray(initial.selectedColumns))
+      setSelectedColumns(initial.selectedColumns);
   }, [initial]);
 
+  // When source changes, load columns from either:
+  // - specific extract step (by id), or
+  // - datasetId (union of headers from all steps with that datasetId)
   useEffect(() => {
-    if (selectedSource) {
-      const step = availableExtractSteps.find((s) => s.id === selectedSource);
+    if (!selectedSource) {
+      setAvailableColumns([]);
+      setSelectedColumns([]);
+      return;
+    }
+
+    // 1) Try match an extract step by id
+    const step = availableExtractSteps.find((s) => s.id === selectedSource);
+    if (step) {
       const headers = step?.headers || [];
       setAvailableColumns(headers);
       setSelectedColumns(headers);
+      return;
     }
-  }, [selectedSource]);
+
+    // 2) Otherwise treat as datasetId
+    const dsSteps = availableExtractSteps.filter(
+      (s) => s.datasetId === selectedSource
+    );
+    if (dsSteps.length > 0) {
+      const headerSet = new Set();
+      dsSteps.forEach((s) => {
+        (s.headers || []).forEach((h) => headerSet.add(h));
+      });
+      const headers = Array.from(headerSet);
+      setAvailableColumns(headers);
+      setSelectedColumns(headers);
+    } else {
+      setAvailableColumns([]);
+      setSelectedColumns([]);
+    }
+  }, [selectedSource, availableExtractSteps]);
 
   // Auto-update file extension on format change
   useEffect(() => {
@@ -48,7 +94,7 @@ const defaultFolder =
   const handleFolderBrowse = async () => {
     try {
       const res = await fetch("http://localhost:8000/api/browse-folder", {
-        method: "POST"
+        method: "POST",
       });
       const data = await res.json();
       if (data?.path) setFolderPath(data.path);
@@ -88,7 +134,6 @@ const defaultFolder =
     }
   };
 
-  
   const handleSubmit = () => {
     if (!selectedSource || !filename || !stepName) return;
 
@@ -96,7 +141,7 @@ const defaultFolder =
       id: crypto.randomUUID(),
       type: "exportData",
       action: "exportData",
-      source: selectedSource,
+      source: selectedSource, // can be datasetId OR extract step id
       format,
       filename,
       folderPath,
@@ -113,7 +158,7 @@ const defaultFolder =
       <div className="flex justify-between text-sm text-blue-700 font-semibold">
         <span>Step 2: Configure</span>
       </div>
-      
+
       <div>
         <label className="block font-medium mb-1">Step Name:</label>
         <input
@@ -125,20 +170,36 @@ const defaultFolder =
         />
       </div>
 
-      {/* Extract Step Picker */}
+      {/* Source picker: dataset or extract step */}
       <div>
-        <label className="block font-medium mb-1">Select Extract Step:</label>
+        <label className="block font-medium mb-1">
+          Select source (dataset or extract step):
+        </label>
         <select
           className="border rounded p-2 w-full"
           value={selectedSource}
           onChange={(e) => setSelectedSource(e.target.value)}
         >
           <option value="">-- Select --</option>
-          {availableExtractSteps.map((step) => (
-            <option key={step.id} value={step.id}>
-              {step.name || step.label || step.id}
-            </option>
-          ))}
+
+          {datasetOptions.length > 0 && (
+            <optgroup label="Datasets">
+              {datasetOptions.map((ds) => (
+                <option key={`ds:${ds}`} value={ds}>
+                  [Dataset] {ds}
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          <optgroup label="Extract steps">
+            {availableExtractSteps.map((step) => (
+              <option key={step.id} value={step.id}>
+                {step.name || step.label || step.id}
+                {step.datasetId ? ` (→ ${step.datasetId})` : ""}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </div>
 
@@ -210,7 +271,9 @@ const defaultFolder =
       {/* Column Selector */}
       {availableColumns.length > 0 && (
         <div>
-          <label className="block font-medium mb-1">Select Columns to Include:</label>
+          <label className="block font-medium mb-1">
+            Select Columns to Include:
+          </label>
           <div className="flex flex-wrap gap-2">
             {availableColumns.map((col) => (
               <label key={col} className="inline-flex items-center space-x-1">
@@ -234,7 +297,9 @@ const defaultFolder =
 
       {/* Actions */}
       <div className="flex justify-between mt-4">
-        <button onClick={() => setStep(1)} className="text-sm text-gray-600">← Back</button>
+        <button onClick={() => setStep(1)} className="text-sm text-gray-600">
+          ← Back
+        </button>
         <button
           onClick={handleSubmit}
           className="bg-green-600 text-white px-4 py-1 rounded"
