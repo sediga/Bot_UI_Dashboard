@@ -12,6 +12,7 @@ export default function CounterLoopWizard({
   mode = "create",
   initial = {},
   onCreate,
+  onTest,
   onCancel,
 }) {
   const [stepName, setStepName]   = useState(initial.stepName || "");

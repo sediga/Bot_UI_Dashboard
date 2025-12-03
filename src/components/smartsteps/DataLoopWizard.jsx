@@ -15,6 +15,7 @@ export default function DataLoopWizard({
   initial = {},
   availableExtractSteps = [],
   onCreate,
+  onTest,
   onCancel,
 }) {
   const [stepName, setStepName]         = useState(initial.stepName || "");

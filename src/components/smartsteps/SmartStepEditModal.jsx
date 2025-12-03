@@ -27,8 +27,19 @@ export default function SmartStepEditModal({
   onClose,
   onSave,
   pickedTarget, // NEW
+  onTestStep
 }) {
   const type = step?.type;
+
+  // Small helper so all children can trigger a test with the same signature
+  const handleTest = (candidateStep) => {
+    if (!onTestStep) return;
+    // if child only passes partial updates, merge with original step
+    const full = candidateStep
+      ? { ...step, ...candidateStep, id: step.id, parentId: step.parentId }
+      : step;
+    onTestStep(full);
+  };
 
   const initial = useMemo(() => {
     switch (type) {
@@ -105,6 +116,7 @@ export default function SmartStepEditModal({
         initial={initial}
         pickedTarget={pickedTarget}          // NEW: listen for agent pick
         onCreate={applyAndSave}              // (edit) returns full updated step payload
+        onTest={handleTest}                  // NEW: forward test hook
         onCancel={onClose}
       />
     );
@@ -114,6 +126,7 @@ export default function SmartStepEditModal({
             mode="edit"
             initial={{ id: step.id, stepName: step.name, loopCount: step.loopCount }}
             onCreate={(updated) => onSave({ ...step, ...updated })}
+            onTest={handleTest}                  // NEW: forward test hook
             onCancel={onClose}
             />
         );
@@ -124,6 +137,7 @@ export default function SmartStepEditModal({
             initial={{ id: step.id, stepName: step.name, selectedSource: step.source }}
             availableExtractSteps={availableExtractSteps}
             onCreate={(updated) => onSave({ ...step, ...updated })}
+            onTest={handleTest}                  // NEW: forward test hook
             onCancel={onClose}
             />
         );
@@ -141,7 +155,8 @@ export default function SmartStepEditModal({
           overwrite: initial.overwrite,
           selectedColumns: initial.selectedColumns,
         }}
-        onCreate={applyAndSave}
+        onCreate={applyAndSave}              // (edit) returns full updated step payload
+        onTest={handleTest}                  // NEW: forward test hook
         onCancel={onClose}
       />
     );
@@ -159,6 +174,7 @@ export default function SmartStepEditModal({
           format: initial.format,
         }}
         onSave={applyAndSave}
+        onTest={handleTest}                  // NEW: forward test hook
         onCancel={onClose}
       />
     );
@@ -168,6 +184,7 @@ export default function SmartStepEditModal({
         mode="edit"
         availableExtractSteps={availableExtractSteps}
         onCreate={applyAndSave}
+        onTest={handleTest}                  // NEW: forward test hook
         onCancel={onClose}
         initial={{
           stepName: initial.stepName,
@@ -192,6 +209,7 @@ export default function SmartStepEditModal({
           filters: Array.isArray(step.filters) ? step.filters : [] 
         }}
         onCreate={(updated) => onSave({ ...step, ...updated, id: step.id, parentId: step.parentId })}
+        onTest={handleTest}                  // NEW: forward test hook
         onCancel={onClose}
       />
     );

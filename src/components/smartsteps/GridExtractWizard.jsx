@@ -9,10 +9,11 @@ function headerText(h) {
 }
 
 export default function GridExtractWizard({
-  mode = "create", // "create" | "edit"
-  initial = null,  // { stepName, gridMeta:{gridSelector,rowSelector,columnHeaders?,columnMappings?}, selectedColumns, filters, filterLogic }
-  pickedTarget,    // used when editing and re-picking
-  onCreate,        // (payload) => void
+  mode = "create",                 // "create" | "edit"
+  initial = null,                  // { stepName, gridMeta:{gridSelector,rowSelector,columnHeaders?,columnMappings?}, selectedColumns, filters }
+  pickedTarget,                    // used when editing and re-picking
+  onCreate,                        // (payload) => void
+  onTest,
   onCancel,
 }) {
   const [gridMeta, setGridMeta] = useState(initial?.gridMeta || null);
@@ -41,6 +42,23 @@ export default function GridExtractWizard({
     });
   };
 
+  const handleTest = () => {
+    if (!onTest) return;
+    const payload = {
+      id: initial?.id || `extractStep_${Date.now()}`,
+      type: "gridExtract",
+      name: stepName,
+      gridSelector,
+      rowSelector,
+      selectors: { grid: gridSelector, row: rowSelector },
+      columnMappings,
+      filters: filters || [],
+      datasetId: datasetId || undefined,
+    };
+    /* build step from draft, same as handleSave */
+    onTest(payload);
+  };
+  
   // When user clicks a new grid in the page (edit flow), refresh like first time:
   useEffect(() => {
     if (!isPicking) return;
@@ -314,13 +332,12 @@ export default function GridExtractWizard({
       )}
 
       <div className="flex justify-between mt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-sm text-gray-600"
-        >
-          ← Back
-        </button>
+        <button type="button" onClick={onCancel} className="text-sm text-gray-600">← Back</button>
+        {onTest && (
+          <button onClick={handleTest} className="btn-outline">
+            Test
+          </button>
+        )}
         <button
           type="button"
           className="bg-green-600 text-white px-4 py-1 rounded"

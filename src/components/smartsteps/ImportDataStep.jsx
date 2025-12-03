@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 // but in this version we don't call any agent endpoint.
 import config from "../../config";
 
-export default function ImportDataStep({ token, onCancel, onSave, mode="create", initial=null }) {
+export default function ImportDataStep({ token, onCancel, onSave, onTest, mode="create", initial=null }) {
   const [file, setFile] = useState(null);
   const [format, setFormat] = useState(null); // "xlsx" | "csv"
   const [sheet, setSheet] = useState("");

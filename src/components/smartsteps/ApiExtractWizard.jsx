@@ -70,6 +70,7 @@ export default function ApiExtractWizard({
   mode = "create",       // "create" | "edit"
   initial = null,        // optional initial step data
   onCreate,              // (payload) => void
+  onTest,
   onCancel,
 }) {
   // ----- Step name -----

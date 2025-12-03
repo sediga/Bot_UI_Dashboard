@@ -10,7 +10,7 @@ import React, { useMemo, useState } from "react";
  * - parentId            : string|null – attach as child of this step (e.g., a dataLoop)
  * - availableExtractSteps: [{ id, name, columnMappings?: [{ header?: any, key?: string, field?: string }] }]
  */
-export default function NavigateStep({ onCreate, onBack, onClose, parentId=null, availableExtractSteps=[], mode="create", initial=null }) {
+export default function NavigateStep({ onCreate, onTest, onBack, onClose, parentId=null, availableExtractSteps=[], mode="create", initial=null }) {
   
   // form state
   const [stepName, setStepName] = useState("Navigate");
