@@ -221,7 +221,7 @@ export default function LaunchSections() {
               to="/learn-more"
               className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
             >
-              Become a Design Partner
+              Bring us a workflow
             </Link>
           </div>
         </>
@@ -235,7 +235,7 @@ export default function LaunchSections() {
 
   return (
     <div style={{ paddingTop: "var(--header-offset)" }}>
-      <div className="bg-transparent px-4 sm:px-6 lg:px-16 xl:px-24 py-12 space-y-16">
+      <div className="mx-auto w-full max-w-7xl bg-transparent px-4 py-12 sm:px-6 lg:px-8 space-y-16">
         {sections.map((section, idx) => {
           const isInteractive = !!(section.video || section.link);
           const overlayLabel =
@@ -244,7 +244,7 @@ export default function LaunchSections() {
           return (
             <section
               key={section.title}
-              className={`flex flex-col md:flex-row items-center gap-10 ${
+              className={`flex flex-col md:flex-row items-start gap-10 ${
                 idx % 2 === 1 ? "md:flex-row-reverse" : ""
               }`}
             >

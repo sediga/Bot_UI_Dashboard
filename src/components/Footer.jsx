@@ -27,7 +27,7 @@ function Footer() {
       ref={ref}
       className="bg-white/85 backdrop-blur border-t-4"
     >
-      <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between space-y-3 md:space-y-0 text-gray-500 text-sm">
+      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between space-y-3 md:space-y-0 text-gray-500 text-sm">
         <div className="text-center">
           © {new Date().getFullYear()}{" "}
           <a

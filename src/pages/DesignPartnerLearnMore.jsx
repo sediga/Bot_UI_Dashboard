@@ -44,7 +44,7 @@ export default function DesignPartnerLearnMore() {
 
             {/* Hero */}
             <section className="bg-gradient-to-b from-slate-50 to-white border-b border-slate-100">
-              <div className="max-w-7xl mx-auto px-6 py-12 md:py-16">
+              <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 md:py-16">
                 <h1 className="text-3xl md:text-3xl font-semibold tracking-tight leading-tight">
                   How teams usually start with Flowtra
                 </h1>
@@ -68,7 +68,7 @@ Most teams come to Flowtra with one or two portal workflows that take too much t
             </section>
 
             {/* Body with side anchors */}
-            <div className="max-w-7xl mx-auto px-6 py-10 grid md:grid-cols-[220px_1fr] gap-8">
+            <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8 grid md:grid-cols-[220px_1fr] gap-8">
               {/* Side nav (desktop) */}
               <nav className="hidden md:block sticky top-28 self-start">
                 <ul className="text-sm text-slate-700 space-y-2">

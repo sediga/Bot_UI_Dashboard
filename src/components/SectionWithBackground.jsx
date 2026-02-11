@@ -22,7 +22,7 @@ const SectionWithBackground = ({ children, gradientId = "grad1", svgPath, classN
       </svg>
 
       {/* Foreground Content */}
-      <div className="relative z-10 max-w-10xl mx-auto px-2">
+      <div className="relative z-10 w-full">
         {children}
       </div>
     </section>

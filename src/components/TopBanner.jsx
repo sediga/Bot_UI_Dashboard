@@ -28,7 +28,7 @@ export default function TopBanner({ hideRibbon = true }) {
     >
       {/* Top bar (logo + nav + auth) */}
       <section className="w-full">
-        <div className="w-full mx-auto px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-start">
             <div className="flex flex-col justify-center">
               <div
@@ -87,7 +87,7 @@ export default function TopBanner({ hideRibbon = true }) {
       {/* Design Partner ribbon (edge-to-edge, welcoming CTA) */}
       {!hideRibbon && (
         <section className="w-full bg-gradient-to-r from-sky-50 via-white to-slate-50 border-t border-slate-200">
-          <div className="mx-auto max-w-screen-2xl px-2 py-6">
+          <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="text-center md:text-left">
                 <h2 className="text-base md:text-lg font-semibold text-slate-900">

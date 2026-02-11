@@ -101,7 +101,7 @@ export default function JoinDesignPartnerPage() {
 
             {/* Hero */}
             <section className="bg-gradient-to-b from-slate-50 to-white">
-              <div className="mx-auto max-w-7xl px-6 py-12 md:py-16">
+              <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8 md:py-16">
                 <h1 className="text-3xl md:text-3xl font-semibold tracking-tight leading-tight">
                   Tell us about the workflow you want off your plate
                   <span className="inline-block ml-2 px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 rounded-full align-middle">
@@ -119,7 +119,7 @@ Share what you’d like to automate, and we’ll design and run your first produ
             </section>
 
             {/* Form */}
-            <section className="mx-auto max-w-5xl px-6 py-10">
+            <section className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
               <form onSubmit={handleSubmit} className="grid gap-6">
                 {/* Honeypot */}
                 <input
@@ -332,7 +332,7 @@ function SuccessScreen() {
         <main className="flex-grow">
           <SectionWithBackground>
             <TopBanner />
-            <div className="text-center mx-auto max-w-2xl px-6 py-56 md:py-64">
+            <div className="text-center mx-auto w-full max-w-2xl px-4 py-56 sm:px-6 lg:px-8 md:py-64">
               <div className="text-3xl font-semibold">Thanks for getting started!</div>
               <p className="mt-3 text-slate-600">
                 We received your details and will reach out shortly to review your workflows
