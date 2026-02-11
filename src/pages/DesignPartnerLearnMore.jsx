@@ -46,21 +46,16 @@ export default function DesignPartnerLearnMore() {
             <section className="bg-gradient-to-b from-slate-50 to-white border-b border-slate-100">
               <div className="max-w-7xl mx-auto px-6 py-12 md:py-16">
                 <h1 className="text-3xl md:text-3xl font-semibold tracking-tight leading-tight">
-                  Flowtra Design Partner Program
+                  How teams usually start with Flowtra
                 </h1>
                 <p className="mt-4 text-slate-600 text-lg max-w-3xl">
-                  We partner with a small number of healthcare ops and product teams to
-                  automate high-volume portal workflows — NPI lookups, CAQH roster checks,
-                  payer status sweeps, device and transcript sync jobs, and more. Design
-                  Partners get hands-on setup, a free production run of their first flow,
-                  priority support, and locked-in early-access pricing.
-                </p>
+Most teams come to Flowtra with one or two portal workflows that take too much time and attention. We work hands-on to capture, harden, and run those workflows so they’re reliable and don’t need daily babysitting.                </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Link
                     to="/join-design-partner"
                     className="rounded-xl bg-sky-700 px-5 py-3 text-white font-medium hover:bg-sky-600"
                   >
-                    Get started as a Design Partner
+                    Bring us a workflow
                   </Link>
                   <a
                     href="#faq"
@@ -181,7 +176,7 @@ export default function DesignPartnerLearnMore() {
                   </p>
                 </Section>
 
-                <Section id="program" title="Program details — what you get">
+                <Section id="program" title="What happens after you bring us a workflow">
                   <ul className="mt-3 grid md:grid-cols-2 gap-3 text-slate-700">
                     <Li>Early access and direct input into the roadmap</Li>
                     <Li>Hands-on design and implementation of 1–2 critical workflows</Li>
@@ -238,7 +233,7 @@ export default function DesignPartnerLearnMore() {
                         to="/join-design-partner"
                         className="rounded-xl bg-sky-700 px-5 py-3 text-white font-medium hover:bg-sky-600"
                       >
-                        Get started as a Design Partner
+                        Bring us a workflow
                       </Link>
                       <a
                         href="#what"

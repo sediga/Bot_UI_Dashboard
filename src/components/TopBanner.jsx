@@ -59,7 +59,7 @@ export default function TopBanner({ hideRibbon = true }) {
               aria-label="Learn about the Flowtra Design Partner program"
               className="px-4 py-2 rounded-lg font-medium border border-sky-300 text-sky-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
             >
-              Design Partner Program
+              Bring us a workflow
             </Link>
 
             <Link
@@ -91,15 +91,11 @@ export default function TopBanner({ hideRibbon = true }) {
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="text-center md:text-left">
                 <h2 className="text-base md:text-lg font-semibold text-slate-900">
-                  Automate your most painful portal workflows
+                  Reliable execution for portal-heavy work
                 </h2>
                 <p className="mt-0.5 text-slate-600 text-sm md:text-base">
-                  We’re working with a small number of healthcare teams and
-                  healthcare products that depend on external portals — payer,
-                  NPI, CAQH, device, and transcript dashboards. Design Partners
-                  get hands-on setup, a free pilot run of their first flow,
-                  priority support, and locked-in early-access pricing.
-                </p>
+                  We work hands-on with healthcare teams to take repetitive work out of external portals — by turning real workflows into reliable flows that just run.
+               </p>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center gap-3 mt-4 md:mt-0">
@@ -109,17 +105,17 @@ export default function TopBanner({ hideRibbon = true }) {
                   aria-label="Get started as a Flowtra Design Partner"
                   className="inline-flex items-center justify-center rounded-full bg-sky-600 px-6 py-2.5 text-sm md:text-base font-semibold text-white shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 text-center leading-snug"
                 >
-                  Get started as a Design Partner
+                  Bring us a workflow
                 </Link>
 
-                <Link
+                {/* <Link
                   to="/guest"
                   aria-label="Try Flowtra in a guest sandbox"
                   className="inline-flex items-center justify-center rounded-full border border-sky-300 bg-white px-6 py-2.5 text-sm md:text-base font-semibold text-sky-700 hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 text-center leading-snug"
                   title="Guest sandbox workspaces reset after each session"
                 >
-                  Try the guest sandbox
-                </Link>
+                  See how it works
+                </Link> */}
 
                 {/* Tertiary: Learn more */}
                 <Link
@@ -130,9 +126,9 @@ export default function TopBanner({ hideRibbon = true }) {
                 </Link>
               </div>
             </div>
-            <p className="mt-2 text-xs text-slate-500 text-center md:text-right">
+            {/* <p className="mt-2 text-xs text-slate-500 text-center md:text-right">
               Guest sandbox workspaces are isolated and reset after each session.
-            </p>
+            </p> */}
           </div>
         </section>
       )}

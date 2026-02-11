@@ -103,21 +103,18 @@ export default function JoinDesignPartnerPage() {
             <section className="bg-gradient-to-b from-slate-50 to-white">
               <div className="mx-auto max-w-7xl px-6 py-12 md:py-16">
                 <h1 className="text-3xl md:text-3xl font-semibold tracking-tight leading-tight">
-                  Get started as a Flowtra Design Partner
+                  Tell us about the workflow you want off your plate
                   <span className="inline-block ml-2 px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 rounded-full align-middle">
                     Not sure yet?&nbsp;
                     <Link to="/learn-more" className="underline">
-                      Learn more about the Design Partner program
+                      See how teams usually get started.
                     </Link>
                   </span>
                 </h1>
                 <p className="mt-4 text-slate-600 text-lg max-w-3xl">
-                  This cohort is for healthcare teams and products that depend on external
-                  portals — payer, NPI, CAQH, and vendor dashboards for devices, transcripts,
-                  and scheduling. Tell us about the workflows you’d like to automate. We’ll
-                  design and run your first production flow as a free pilot, then agree on a
-                  simple ongoing plan if it’s clearly saving your team time.
-                </p>
+Most teams come to Flowtra with one or two portal workflows that are taking too much time and attention.
+
+Share what you’d like to automate, and we’ll design and run your first production flow as a free pilot. If it clearly saves time, we’ll agree on a simple ongoing plan.                </p>
               </div>
             </section>
 
@@ -273,7 +270,7 @@ export default function JoinDesignPartnerPage() {
                       className="mt-1 h-4 w-4 rounded border-slate-300"
                     />
                     <span className="text-sm text-slate-700">
-                      I agree to be contacted about the Design Partner cohort and related updates.
+                      I agree to be contacted about my workflow and related updates.
                     </span>
                   </label>
                 </div>
@@ -289,7 +286,7 @@ export default function JoinDesignPartnerPage() {
                     disabled={state.loading}
                     className="rounded-xl bg-sky-700 px-5 py-3 text-white font-medium hover:bg-sky-600 disabled:opacity-60"
                   >
-                    {state.loading ? "Submitting…" : "Get started as a Design Partner"}
+                    {state.loading ? "Submitting…" : "Submit"}
                   </button>
                   {state.err && (
                     <span className="text-sm text-rose-600">{state.err}</span>
