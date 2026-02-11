@@ -160,15 +160,16 @@ export default function StepList({
 
   // Conservatively replace the literal inside common selector patterns
   const replaceInSelector = (sel, literal, template) => {
-    if (!sel || !literal || !template) return sel;
-    let s = sel;
-    const FROM = escRe(String(literal));
+    try {
+      if (!sel || !literal || !template) return sel;
+      let s = sel;
+      const FROM = escRe(String(literal));
 
-    // since withFilter is a no-op, these are just `template`
-    const T_TEXT = withFilter(template, "text");
-    const T_CSS  = withFilter(template, "css");
+      // since withFilter is a no-op, these are just `template`
+      const T_TEXT = withFilter(template, "text");
+      const T_CSS  = withFilter(template, "css");
 
-    const rules = [
+      const rules = [
       // Attribute equalities that carry identifiers/text -> use CSS escaping semantics
       [new RegExp(`(\\[\\s*(?:value|name|placeholder|title)\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
       [new RegExp(`(\\[\\s*for\\s*=\\s*")${FROM}(")`, "gi"), `$1${T_CSS}$2`],
@@ -189,7 +190,12 @@ export default function StepList({
     ];
 
     for (const [rx, rep] of rules) s = s.replace(rx, rep);
-    return s;
+      return s;
+    } catch (err) {
+      console.error("replaceInSelector failed:", err, { sel, literal, template });
+      // On error, return original selector unchanged so caller can continue safely
+      return sel;
+    }
   };
 
   // --- Continue Recording helpers ---------------------------------------------
@@ -326,96 +332,115 @@ const withFilter = (tok, filter) =>
     : tok;
 
   function instantiateSelectorTemplates(step, valueToken) {
-    const out = [];
-    const list = Array.isArray(step.selectorTemplates) ? step.selectorTemplates : [];
+    try {
+      const out = [];
+      const list = Array.isArray(step.selectorTemplates) ? step.selectorTemplates : [];
 
-    for (const tmpl of list) {
-      if (!tmpl?.selector) continue;
-      // Only support plain {{VALUE}} now
-      const sel = tmpl.selector.replaceAll("{{VALUE}}", valueToken);
-      out.push({
-        selector: sel,
-        source: `${tmpl.source || "template"}`,
-        param: true,
-      });
-    }
-
-    // Always keep any existing recorded selector as a tail fallback
-    if (typeof step.selector === "string" && step.selector) {
-      out.push({ selector: step.selector, source: "recorded", param: false });
-    }
-    // and any recorded candidates
-    if (Array.isArray(step.selectors)) {
-      for (const c of step.selectors) {
-        if (c?.selector) out.push({ ...c });
+      for (const tmpl of list) {
+        if (!tmpl?.selector) continue;
+        // Only support plain {{VALUE}} now
+        const sel = tmpl.selector.replaceAll("{{VALUE}}", valueToken);
+        out.push({
+          selector: sel,
+          source: `${tmpl.source || "template"}`,
+          param: true,
+        });
       }
+
+      // Always keep any existing recorded selector as a tail fallback
+      if (typeof step.selector === "string" && step.selector) {
+        out.push({ selector: step.selector, source: "recorded", param: false });
+      }
+      // and any recorded candidates
+      if (Array.isArray(step.selectors)) {
+        for (const c of step.selectors) {
+          if (c?.selector) out.push({ ...c });
+        }
+      }
+      return out;
+    } catch (err) {
+      console.warn("instantiateSelectorTemplates failed, falling back:", err, { stepId: step?.id });
+      // Fallback: return any recorded selector(s) so caller has something usable
+      const fallback = [];
+      if (typeof step.selector === "string" && step.selector) fallback.push({ selector: step.selector, source: "recorded", param: false });
+      if (Array.isArray(step.selectors)) {
+        for (const c of step.selectors) if (c?.selector) fallback.push({ ...c });
+      }
+      return fallback;
     }
-    return out;
   }
 
   const patchSelectorsForParam = (step, oldLiteral, template) => {
-    if (!step || !template) return step;
+    try {
+      if (!step || !template) return step;
 
-    // Only templatize selectors when the element is chosen by the data
-    if (!shouldTemplatizeSelector(step)) {
-      return step; // leave selector(s) untouched
-    }
-
-  const next = { ...step };
-  let changed = false;
-
-  // Preferred: selectorTemplates
-  if (Array.isArray(step.selectorTemplates) && step.selectorTemplates.length) {
-    next.selectors = instantiateSelectorTemplates(step, template);
-    const primary = next.selectors?.[0]?.selector;
-    if (primary) {
-      next.originalSelector = next.originalSelector || step.selector || primary;
-      next.selector = primary;
-    }
-    changed = true;
-  } else {
-    // Back-compat: regex/literal patch
-    if (typeof step.selector === "string" && step.selector && oldLiteral) {
-      const LIT = oldLiteral || step?.value || step?.labelText || "";
-      const newSel = replaceInSelector(step.selector, LIT, template);
-      if (newSel !== step.selector) {
-        next.originalSelector = step.originalSelector || step.selector;
-        next.selector = newSel;
-        changed = true;
+      // Only templatize selectors when the element is chosen by the data
+      if (!shouldTemplatizeSelector(step)) {
+        return step; // leave selector(s) untouched
       }
-    }
-    if (Array.isArray(step.selectors) && step.selectors.length && oldLiteral) {
-      const patched = step.selectors.map((c) => {
-        const sel = c?.selector || "";
-        const LIT = oldLiteral || step?.value || step?.labelText || "";
-        const newSel = replaceInSelector(sel, LIT, template);
-        if (newSel !== sel) {
-          changed = true;
-          return {
-            ...c,
-            originalSelector: c.originalSelector || sel,
-            selector: newSel,
-            source: `${c.source || "unknown"}:param`,
-            param: true,
-          };
+
+      const next = { ...step };
+      let changed = false;
+
+      // Preferred: selectorTemplates
+      if (Array.isArray(step.selectorTemplates) && step.selectorTemplates.length) {
+        next.selectors = instantiateSelectorTemplates(step, template);
+        const primary = next.selectors?.[0]?.selector;
+        if (primary) {
+          next.originalSelector = next.originalSelector || step.selector || primary;
+          next.selector = primary;
         }
-        return c;
-      });
-      if (changed) next.selectors = patched;
+        changed = true;
+      } else {
+        // Back-compat: regex/literal patch
+        if (typeof step.selector === "string" && step.selector && oldLiteral) {
+          const LIT = oldLiteral || step?.value || step?.labelText || "";
+          const newSel = replaceInSelector(step.selector, LIT, template);
+          if (newSel !== step.selector) {
+            next.originalSelector = step.originalSelector || step.selector;
+            next.selector = newSel;
+            changed = true;
+          }
+        }
+        if (Array.isArray(step.selectors) && step.selectors.length && oldLiteral) {
+          const patched = step.selectors.map((c) => {
+            try {
+              const sel = c?.selector || "";
+              const LIT = oldLiteral || step?.value || step?.labelText || "";
+              const newSel = replaceInSelector(sel, LIT, template);
+              if (newSel !== sel) {
+                changed = true;
+                return {
+                  ...c,
+                  originalSelector: c.originalSelector || sel,
+                  selector: newSel,
+                  source: `${c.source || "unknown"}:param`,
+                  param: true,
+                };
+              }
+            } catch (err) {
+              console.warn("Failed to patch one selector candidate:", err, { stepId: step.id, candidate: c });
+            }
+            return c;
+          });
+          if (changed) next.selectors = patched;
+        }
+      }
+
+      if (typeof step.containerSelector === "string" && step.containerSelector) {
+        const LIT = oldLiteral || step?.value || step?.labelText || "";
+        const cNew = replaceInSelector(step.containerSelector, LIT, template);
+        if (cNew !== step.containerSelector) {
+          next.containerSelector = cNew;
+          changed = true;
+        }
+      }
+
+      return changed ? next : step;
+    } catch (err) {
+      console.warn("patchSelectorsForParam failed, leaving step unchanged:", err, { stepId: step?.id });
+      return step;
     }
-  }
-
-  if (typeof step.containerSelector === "string" && step.containerSelector) {
-    const LIT = oldLiteral || step?.value || step?.labelText || "";
-    const cNew = replaceInSelector(step.containerSelector, LIT, template);
-    if (cNew !== step.containerSelector) {
-      next.containerSelector = cNew;
-      changed = true;
-    }
-  }
-
-
-  return changed ? next : step;
 };
 
 
@@ -1171,47 +1196,23 @@ const updateStep = (id, patch) =>
                 {step.label || "Key–value fields"}
               </span>
 
+              {/* Show the configured key/value mappings */}
               {Array.isArray(step.config?.pairs) && step.config.pairs.length > 0 && (
                 <div className="mt-1 text-xs text-slate-500 space-y-0.5">
                   {step.config.pairs.map((p, idx) => (
                     <div key={idx}>
-                      {p.label || p.key || `Field ${idx + 1}`}{" "}
-                      <code>{p.valueSelector || "(value selector)"}</code>
+                      <span className="font-semibold">
+                        {p.label || p.key || `Field ${idx + 1}`}
+                      </span>{" "}
+                      <span className="text-slate-400">←</span>{" "}
+                      <code>{p.valueSelector || "(value selector not set)"}</code>
                     </div>
                   ))}
                 </div>
               )}
-              {(() => {
-                if (!sessionDatasets) return null;
-
-                // Debug logging (safe, won’t break JSX)
-                const keys = Object.keys(sessionDatasets);
-                console.log("[StepList/importData] dataset keys:", keys);
-                console.log("[StepList/importData] step.id:", step.id);
-
-                // Try a few ways to resolve the matching dataset
-                const idKey     = step.id;
-                const stringKey = String(step.id);
-                const nameKey   = step.name && keys.includes(step.name) ? step.name : null;
-
-                const dsKey = step.datasetId && keys.includes(step.datasetId)
-                  ? step.datasetId
-                  : null;
-
-                const dataset =
-                  sessionDatasets[idKey] ??
-                  sessionDatasets[stringKey] ??
-                  (dsKey ? sessionDatasets[dsKey] : null) ??
-                  (nameKey ? sessionDatasets[nameKey] : null);
-
-                if (!dataset || !Array.isArray(dataset.rows) || dataset.rows.length === 0) {
-                  return null;
-                }
-
-                return <DatasetPreview data={dataset.rows} />;
-              })()}
             </div>
           )}
+
 
           {step.type === "keyValueCollect" && (
             <div>

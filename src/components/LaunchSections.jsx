@@ -42,6 +42,44 @@ export default function LaunchSections() {
 
   const sections = [
     {
+      title: "Ready to automate smarter?",
+      content: (
+        <>
+          See your first real portal flow in action — from NPI lookups to payer, credentialing,
+          or device dashboards, Flowtra turns nightly busywork into a button.
+          <div className="mt-4">
+            <a
+              href="https://flowtra.app/signup"
+              className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition"
+            >
+              Create a free Flowtra account
+            </a>
+            <p className="text-sm mt-2 text-gray-600">
+              Prefer a guided path?{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  openPopup({
+                    title: "Request a 20-minute walkthrough",
+                    emailLabel: "Your work email",
+                    messageLabel: "What workflow do you want to automate?",
+                    messagePlaceholder:
+                      "Describe the portals you use (payer, NPI, CAQH, devices, transcripts, scheduling, etc.) and what you’d like to automate…",
+                    submitText: "Request walkthrough",
+                  })
+                }
+                className="underline cursor-pointer"
+              >
+                Book a 20-minute call
+              </button>
+            </p>
+          </div>
+        </>
+      ),
+      image: "/assets/slides/action_1.png",
+      imageAlt: "Join now CTA banner"
+    },
+    {
       title: "Simple setup. Production-grade results.",
       content: (
         <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
@@ -85,33 +123,20 @@ export default function LaunchSections() {
       videoLabel: "See NPI export in action",
     },
     {
-      title: "Custom bots for your ugliest workflows",
+      title: "Secure and private by design",
       content: (
-        <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-          <li>Have a complex workflow Flowtra doesn’t cover out of the box?</li>
-          <li>
-            We’ll design and build a custom bot around your exact portals, grids, and business rules.
-          </li>
-          <li>
-            From multi-page payer forms to device or transcript dashboards, we handle the edge cases.
-          </li>
-          <li>
-            Submit a request and we’ll respond within one business day with next steps.
-          </li>
-        </ol>
+        <>
+          Your flows run through the Flowtra Agent by default, so credentials and sensitive data
+          can stay on your side of the fence.
+          <ul className="list-disc list-inside mt-3 text-sm text-gray-700 space-y-1">
+            <li>Agent can run on your own desktop or server in your network.</li>
+            <li>Encryption in transit and at rest for any data sent to Flowtra services.</li>
+            <li>No scripts or data stored without your consent; PHI retention is opt-in and explicit.</li>
+          </ul>
+        </>
       ),
-      image: "/assets/slides/custom_bot.png",
-      imageAlt: "Custom bot development illustration",
-      link: true,
-      linkCaption: "Tell us what you need",
-      popupProps: {
-        title: "Request a custom bot",
-        emailLabel: "Your work email",
-        messageLabel: "Automation requirement",
-        messagePlaceholder:
-          "Describe your workflow, portals (payer, NPI, CAQH, devices, transcripts, etc.), and what “done” looks like…",
-        submitText: "Send request",
-      },
+      image: "/assets/slides/secure.png",
+      imageAlt: "Security shield and privacy icons"
     },
     {
       title: "Built for lean healthcare teams, not giant RPA budgets",
@@ -150,6 +175,35 @@ export default function LaunchSections() {
       imageAlt: "Illustration of healthcare teams and product squads",
     },
     {
+      title: "Custom bots for your ugliest workflows",
+      content: (
+        <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
+          <li>Have a complex workflow Flowtra doesn’t cover out of the box?</li>
+          <li>
+            We’ll design and build a custom bot around your exact portals, grids, and business rules.
+          </li>
+          <li>
+            From multi-page payer forms to device or transcript dashboards, we handle the edge cases.
+          </li>
+          <li>
+            Submit a request and we’ll respond within one business day with next steps.
+          </li>
+        </ol>
+      ),
+      image: "/assets/slides/custom_bot.png",
+      imageAlt: "Custom bot development illustration",
+      link: true,
+      linkCaption: "Tell us what you need",
+      popupProps: {
+        title: "Request a custom bot",
+        emailLabel: "Your work email",
+        messageLabel: "Automation requirement",
+        messagePlaceholder:
+          "Describe your workflow, portals (payer, NPI, CAQH, devices, transcripts, etc.), and what “done” looks like…",
+        submitText: "Send request",
+      },
+    },
+    {
       title: "Join early. Get your portal workflows off the team's plate.",
       content: (
         <>
@@ -176,60 +230,6 @@ export default function LaunchSections() {
       imageAlt: "Collaborative roadmap illustration",
       video: "/assets/slides/onboard/basic_flow/feedback_1.mp4",
       videoLabel: "See how feedback loops work",
-    },
-    {
-      title: "Secure and private by design",
-      content: (
-        <>
-          Your flows run through the Flowtra Agent by default, so credentials and sensitive data
-          can stay on your side of the fence.
-          <ul className="list-disc list-inside mt-3 text-sm text-gray-700 space-y-1">
-            <li>Agent can run on your own desktop or server in your network.</li>
-            <li>Encryption in transit and at rest for any data sent to Flowtra services.</li>
-            <li>No scripts or data stored without your consent; PHI retention is opt-in and explicit.</li>
-          </ul>
-        </>
-      ),
-      image: "/assets/slides/secure.png",
-      imageAlt: "Security shield and privacy icons"
-    },
-    {
-      title: "Ready to automate smarter?",
-      content: (
-        <>
-          See your first real portal flow in action — from NPI lookups to payer, credentialing,
-          or device dashboards, Flowtra turns nightly busywork into a button.
-          <div className="mt-4">
-            <a
-              href="https://flowtra.app/signup"
-              className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition"
-            >
-              Create a free Flowtra account
-            </a>
-            <p className="text-sm mt-2 text-gray-600">
-              Prefer a guided path?{" "}
-              <button
-                type="button"
-                onClick={() =>
-                  openPopup({
-                    title: "Request a 20-minute walkthrough",
-                    emailLabel: "Your work email",
-                    messageLabel: "What workflow do you want to automate?",
-                    messagePlaceholder:
-                      "Describe the portals you use (payer, NPI, CAQH, devices, transcripts, scheduling, etc.) and what you’d like to automate…",
-                    submitText: "Request walkthrough",
-                  })
-                }
-                className="underline cursor-pointer"
-              >
-                Book a 20-minute call
-              </button>
-            </p>
-          </div>
-        </>
-      ),
-      image: "/assets/slides/action_1.png",
-      imageAlt: "Join now CTA banner"
     },
   ];
 
