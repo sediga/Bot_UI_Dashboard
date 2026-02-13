@@ -1193,10 +1193,43 @@ const updateStep = (id, patch) =>
               <span className="font-medium text-sky-700">Key–value extract</span>{" "}
               →{" "}
               <span className="text-slate-700">
-                {step.label || "Key–value fields"}
+                {step.name || step.label || "Key–value fields"}
               </span>
 
-              {/* Show the configured key/value mappings */}
+              {step.datasetId && (
+                <div className="mt-1 text-xs text-slate-500">
+                  Dataset: <code>{step.datasetId}</code>
+                </div>
+              )}
+
+              {step.storageMode && (
+                <div className="mt-0.5 text-xs text-slate-500">
+                  Storage: <code>{step.storageMode}</code>
+                </div>
+              )}
+
+              {step.sink?.enabled && (
+                <div className="mt-0.5 text-xs text-slate-500">
+                  Sink: <code>{step.sink?.format || "csv"}</code>{" "}
+                  <code>{step.sink?.path || "(path not set)"}</code>
+                </div>
+              )}
+
+              {/* New shape: fields[]; old shape fallback: config.pairs */}
+              {Array.isArray(step.fields) && step.fields.length > 0 && (
+                <div className="mt-1 text-xs text-slate-500 space-y-0.5">
+                  {step.fields.map((f, idx) => (
+                    <div key={idx}>
+                      <span className="font-semibold">
+                        {f.label || f.key || `Field ${idx + 1}`}
+                      </span>{" "}
+                      <span className="text-slate-400">←</span>{" "}
+                      <code>{f.valueSelector || "(value selector not set)"}</code>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {Array.isArray(step.config?.pairs) && step.config.pairs.length > 0 && (
                 <div className="mt-1 text-xs text-slate-500 space-y-0.5">
                   {step.config.pairs.map((p, idx) => (
@@ -1221,6 +1254,18 @@ const updateStep = (id, patch) =>
               <span className="text-slate-700">
                 {step.name || "Collected key–value items"}
               </span>
+
+              {step.datasetId && (
+                <div className="mt-1 text-xs text-slate-500">
+                  Dataset: <code>{step.datasetId}</code>
+                </div>
+              )}
+
+              {step.source?.stepId && (
+                <div className="mt-0.5 text-xs text-slate-500">
+                  Source step: <code>{step.source.stepId}</code>
+                </div>
+              )}
 
               {/* Show field definitions */}
               {Array.isArray(step.fields) && step.fields.length > 0 && (
@@ -1505,7 +1550,7 @@ const updateStep = (id, patch) =>
           (() => {
             const s = steps.find(st => st.id === editingStepId);
             const SMART_TYPES = new Set([
-              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract"
+              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract","keyValueExtract","keyValueCollect"
             ]);
             return SMART_TYPES.has(s?.type)
               ? (

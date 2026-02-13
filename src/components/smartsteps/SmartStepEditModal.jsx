@@ -8,6 +8,8 @@ import GridExtractWizard from "./GridExtractWizard";
 import CounterLoopWizard from "./CounterLoopWizard";
 import DataLoopWizard from "./DataLoopWizard";
 import ApiExtractWizard from "./ApiExtractWizard";
+import KeyValueExtractWizard from "./KeyValueExtractWizard";
+import KeyValueCollectWizard from "./KeyValueCollectWizard";
 
 /**
  * SmartStepEditModal
@@ -96,6 +98,27 @@ export default function SmartStepEditModal({
           target: step.target || "newTab",
           waitUntil: step.waitUntil || "domcontentloaded",
           timeoutMs: step.timeoutMs || 15000,
+        };
+      case "keyValueExtract":
+        return {
+          id: step.id,
+          stepName: step.name || step.label || "",
+          containerSelector: step.containerSelector || step.selectors?.container || "",
+          fields: Array.isArray(step.fields)
+            ? step.fields
+            : Array.isArray(step.config?.pairs)
+            ? step.config.pairs
+            : [],
+          datasetId: step.datasetId || "",
+        };
+      case "keyValueCollect":
+        return {
+          id: step.id,
+          stepName: step.name || step.label || "",
+          containerSelector: step.containerSelector || step.selectors?.container || "",
+          itemSelector: step.itemSelector || step.selectors?.item || "",
+          fields: Array.isArray(step.fields) ? step.fields : [],
+          datasetId: step.datasetId || "",
         };
       default:
         return {};
@@ -210,6 +233,24 @@ export default function SmartStepEditModal({
         }}
         onCreate={(updated) => onSave({ ...step, ...updated, id: step.id, parentId: step.parentId })}
         onTest={handleTest}                  // NEW: forward test hook
+        onCancel={onClose}
+      />
+    );
+  } else if (type === "keyValueExtract") {
+    body = (
+      <KeyValueExtractWizard
+        mode="edit"
+        initial={initial}
+        onCreate={applyAndSave}
+        onCancel={onClose}
+      />
+    );
+  } else if (type === "keyValueCollect") {
+    body = (
+      <KeyValueCollectWizard
+        mode="edit"
+        initial={initial}
+        onCreate={applyAndSave}
         onCancel={onClose}
       />
     );
