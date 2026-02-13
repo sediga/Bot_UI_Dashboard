@@ -78,6 +78,10 @@ const Login = () => {
 
       if (!res.ok) {
         const errorData = await res.json();
+        if (res.status === 403 && errorData?.requiresVerification) {
+          navigate(`/check-email?email=${encodeURIComponent(errorData?.email || email)}`);
+          return;
+        }
         throw new Error(errorData.message || "Login failed");
       }
 

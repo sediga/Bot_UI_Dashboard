@@ -17,6 +17,8 @@ import JoinDesignPartnerPage from "./pages/JoinDesignPartnerPage";
 import DesignPartnerLearnMore from "./pages/DesignPartnerLearnMore";
 import GuestStart from "./pages/GuestStart";
 import Docs from "./pages/Docs";
+import CheckEmailPage from "./pages/CheckEmailPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import config from "./config";
 
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID || window.__GA_MEASUREMENT_ID__ || "";
@@ -43,6 +45,8 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login login={login} />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/check-email" element={<CheckEmailPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route
           path="/dashboard/*"
           element={

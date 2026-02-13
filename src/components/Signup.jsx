@@ -32,7 +32,14 @@ const Signup = () => {
         const err = await res.json();
         throw new Error(err.message || "Signup failed");
       }
-      navigate("/login");
+      const data = await res.json().catch(() => ({}));
+      navigate(`/check-email?email=${encodeURIComponent(data?.email || email)}`, {
+        state: {
+          message: data?.message || "",
+          verificationSent: data?.verificationSent !== false,
+          verificationError: data?.verificationError || "",
+        },
+      });
       gaEvent("signup_complete");
     } catch (err) {
       setError(err.message);

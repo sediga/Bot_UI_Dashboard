@@ -69,6 +69,10 @@ const ProtectedLayout = ({ children }) => {
 
         if (!res.ok) throw new Error("me failed");
         const data = await res.json();
+        if (data?.isGuest !== true && data?.emailVerified === false) {
+          navigate(`/check-email?email=${encodeURIComponent(data?.username || "")}`);
+          return;
+        }
         if (!cancelled) setEmail(data?.username || data?.email || "");
       } catch (e) {
         console.warn("[ProtectedLayout] /api/me failed; continuing", e);
