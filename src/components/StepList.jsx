@@ -12,6 +12,7 @@ import ColumnContextMenu from "./smartsteps/ColumnContextMenu";
 import StepEditorModal from "./StepEditorModal";
 import SmartStepEditModal from "./smartsteps/SmartStepEditModal";
 import DatasetPreview from "./DatasetPreview";
+import { normalizeStep, validateFlowSteps } from "../utils/flowSchema";
 
 export default function StepList({
   steps,
@@ -23,6 +24,7 @@ export default function StepList({
   setCurrentLoopId,
   sessionDatasets
 }) {
+  const HISTORY_LIMIT = 50;
   const [expandedSteps, setExpandedSteps] = useState({});
   const [showSmartWizard, setShowSmartWizard] = useState(false);
   const [finalizedLoops, setFinalizedLoops] = useState(new Set());
@@ -38,14 +40,99 @@ export default function StepList({
   const [secretCtx, setSecretCtx] = useState(null);
   // near other useState calls
   const [editingValueStepId, setEditingValueStepId] = useState(null);
+  const [searchText, setSearchText] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [showOnlyInvalid, setShowOnlyInvalid] = useState(false);
   const [columnMenu, setColumnMenu] = useState({
     open: false, x: 0, y: 0, stepId: null, columns: []
   });
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const internalHistoryMutationRef = useRef(false);
   // --- generic container model (any container can nest any container) ---
   const CONTAINER_TYPES = new Set(["loop", "dataLoop", "counterloop", "navigate"]);
   const isContainer = (s) => !!s && CONTAINER_TYPES.has(s.type);
+  const STEP_TYPES = [
+    "uiAction",
+    "navigate",
+    "gridExtract",
+    "apiExtract",
+    "importData",
+    "exportData",
+    "dataLoop",
+    "counterloop",
+    "keyValueExtract",
+    "keyValueCollect",
+    "manualCheckpoint",
+    "wait",
+  ];
+  const getTypeKey = (step) => String(step?.type || "").toLowerCase();
+  const KNOWN_RENDER_TYPES = new Set(STEP_TYPES.map((t) => t.toLowerCase()));
 
   const [containerStack, setContainerStack] = useState([]); // stack of step ids
+  const cloneSteps = (arr) => JSON.parse(JSON.stringify(Array.isArray(arr) ? arr : []));
+
+  const commitSteps = useCallback((nextOrUpdater, label = "Updated steps") => {
+    const prev = steps;
+    const next = typeof nextOrUpdater === "function" ? nextOrUpdater(prev) : nextOrUpdater;
+    if (!Array.isArray(next)) return;
+    if (JSON.stringify(prev) === JSON.stringify(next)) return;
+
+    setUndoStack((stk) => [...stk.slice(-(HISTORY_LIMIT - 1)), { steps: cloneSteps(prev), label }]);
+    setRedoStack([]);
+    internalHistoryMutationRef.current = true;
+    setSteps(next);
+  }, [steps, setSteps]);
+
+  const handleUndo = useCallback(() => {
+    if (!undoStack.length) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack((stk) => stk.slice(0, -1));
+    setRedoStack((stk) => [...stk.slice(-(HISTORY_LIMIT - 1)), { steps: cloneSteps(steps), label: last.label }]);
+    internalHistoryMutationRef.current = true;
+    setSteps(last.steps);
+    pruneStackAgainst(last.steps);
+  }, [undoStack, steps, setSteps]);
+
+  const handleRedo = useCallback(() => {
+    if (!redoStack.length) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((stk) => stk.slice(0, -1));
+    setUndoStack((stk) => [...stk.slice(-(HISTORY_LIMIT - 1)), { steps: cloneSteps(steps), label: next.label }]);
+    internalHistoryMutationRef.current = true;
+    setSteps(next.steps);
+    pruneStackAgainst(next.steps);
+  }, [redoStack, steps, setSteps]);
+
+  useEffect(() => {
+    if (internalHistoryMutationRef.current) {
+      internalHistoryMutationRef.current = false;
+      return;
+    }
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [steps]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const meta = e.ctrlKey || e.metaKey;
+      if (!meta) return;
+      const key = String(e.key || "").toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if (key === "z" && e.shiftKey) {
+        e.preventDefault();
+        handleRedo();
+      } else if (key === "y") {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleUndo, handleRedo]);
+
   const handleCloseEditor = useCallback(() => setEditingStepId(null), []);
   const handleSaveEditor = useCallback(
     (patched) => {
@@ -55,23 +142,24 @@ export default function StepList({
         return;
       }
 
-      setSteps((prev) =>
-        prev.map((s) =>
+      commitSteps((prev) =>
+        validateFlowSteps(prev.map((s) =>
           s.id === patched.id
             ? {
-                ...s,
-                ...patched,
+                ...normalizeStep({
+                  ...s,
+                  ...patched,
+                }),
                 // never let an edit accidentally change identity/parent
                 id: s.id,
                 parentId: s.parentId,
               }
             : s
-        )
-      );
+        )).steps, "Edit step");
 
       setEditingStepId(null);
     },
-    [setSteps]
+    [commitSteps]
   );
 
   // derive current container from stack; fall back to prop for back-compat
@@ -461,7 +549,7 @@ function sanitize(next) {
 const displayValue = (v) => Array.isArray(v) ? v.join(", ") : (v ?? "");
 
 function applyValue(stepId, token) {
-  setSteps(prev =>
+  commitSteps(prev =>
     prev.map(s => {
       if (s.id !== stepId) return s;
 
@@ -491,7 +579,7 @@ function applyValue(stepId, token) {
         label: `${(s.action || "Action").replace(/^./, c => c.toUpperCase())}: ${next}`,
       };
     })
-  );
+  , "Edit step value");
 }
 
  const guessSecretName = (s) => {
@@ -512,7 +600,7 @@ function applyValue(stepId, token) {
   };  
   
 const updateStep = (id, patch) =>
-  setSteps(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+  commitSteps(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)), "Edit step");
 
   useEffect(() => {
     const initialExpanded = {};
@@ -550,7 +638,7 @@ const updateStep = (id, patch) =>
 
   const deleteStep = (stepId) => {
     const updated = steps.filter((s) => s.id !== stepId && s.parentId !== stepId);
-    setSteps(updated);
+    commitSteps(updated, "Delete step");
     pruneStackAgainst(updated);
   };
 
@@ -566,11 +654,11 @@ const updateStep = (id, patch) =>
       if (!confirmDelete) return;
 
       const updated = steps.filter((s) => s.id !== step.id && s.id !== parentId);
-      setSteps(updated);
+      commitSteps(updated, "Delete step");
       pruneStackAgainst(updated);
     } else {
       const updated = steps.filter((s) => s.id !== step.id);
-      setSteps(updated);
+      commitSteps(updated, "Delete step");
       pruneStackAgainst(updated);
     }
   };
@@ -581,7 +669,7 @@ const updateStep = (id, patch) =>
       step.parentId = currentContainerId;
     }
 
-    setSteps(prev => [...prev, step]);
+    commitSteps(prev => [...prev, step], "Add step");
     setPickedTarget(null);
     setShowSmartWizard(false);
 
@@ -645,7 +733,7 @@ const updateStep = (id, patch) =>
       if (!confirmDelete) return;
 
       const updatedSteps = steps.filter((s) => s.id !== loopId && s.parentId !== loopId);
-      setSteps(updatedSteps);
+      commitSteps(updatedSteps, "Delete empty loop");
       pruneStackAgainst(updatedSteps);
     } else {
       setFinalizedLoops((prev) => {
@@ -780,7 +868,7 @@ const updateStep = (id, patch) =>
 
       // Remove container and any stale children just in case
       const updated = steps.filter(s => s.id !== container.id && s.parentId !== container.id);
-      setSteps(updated);
+      commitSteps(updated, "Delete empty container");
 
       await endOnAgent(container);
 
@@ -870,6 +958,60 @@ const updateStep = (id, patch) =>
     return `${base} bg-slate-100 text-slate-700`;
   };
 
+  const stepMatchesFilter = (step) => {
+    const term = searchText.trim().toLowerCase();
+    const typeOk = typeFilter === "all" || getTypeKey(step) === typeFilter;
+    const invalidOk = !showOnlyInvalid || (Array.isArray(step.validationErrors) && step.validationErrors.length > 0);
+    if (!typeOk || !invalidOk) return false;
+    if (!term) return true;
+    const hay = [
+      step.type,
+      step.action,
+      step.label,
+      step.url,
+      step.selector,
+      step.name,
+      step.message,
+      step.value,
+      step.waitForUrlContains,
+      step.timeoutMs,
+      step.pollMs,
+      step.validationReason,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(term);
+  };
+
+  const matchedTopLevelIds = (() => {
+    const top = steps.filter((s) => s.parentId == null);
+    if (!searchText.trim() && typeFilter === "all" && !showOnlyInvalid) {
+      return new Set(top.map((s) => s.id));
+    }
+    const byParent = new Map();
+    for (const s of steps) {
+      const pid = s.parentId ?? "__ROOT__";
+      if (!byParent.has(pid)) byParent.set(pid, []);
+      byParent.get(pid).push(s);
+    }
+
+    const keepTop = new Set();
+    const walk = (node, topId) => {
+      const selfMatch = stepMatchesFilter(node);
+      const kids = byParent.get(node.id) || [];
+      let childMatch = false;
+      for (const k of kids) {
+        if (walk(k, topId)) childMatch = true;
+      }
+      if (selfMatch || childMatch) keepTop.add(topId);
+      return selfMatch || childMatch;
+    };
+
+    for (const t of top) walk(t, t.id);
+    return keepTop;
+  })();
+
   const renderStep = (step, level = 0) => {
     const indent = `ml-${level * 4}`;
     const hasChildren = steps.some((s) => s.parentId === step.id);
@@ -887,6 +1029,8 @@ const updateStep = (id, patch) =>
     const showFinishForThis = agentStatus === "recording" &&
       !finalizedLoops.has(step.id) &&
       (currentContainerId === step.id || finishEnabledIds.has(step.id));
+    const hasValidationErrors = Array.isArray(step.validationErrors) && step.validationErrors.length > 0;
+    const stepTypeKey = getTypeKey(step);
 
     const columnsForThisStep = (() => {
       if (!dataLoopAncestor) return [];
@@ -1087,8 +1231,23 @@ const updateStep = (id, patch) =>
                 Edit dynamic input value
               </div>
             </div>
-          )}
-            </div>
+                )}
+                {hasValidationErrors && (
+                  <div className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
+                    {step.validationErrors.join(" ")}
+                  </div>
+                )}
+                {typeof step.value === "string" && /\{\{\s*row\./.test(step.value) && (
+                  <div className="mt-1 text-[11px] text-blue-700">
+                    Uses loop token mapping.
+                  </div>
+                )}
+                {typeof step.value === "string" && /\{\{\s*secret:/.test(step.value) && (
+                  <div className="mt-1 text-[11px] text-emerald-700">
+                    Uses secret reference.
+                  </div>
+                )}
+              </div>
           )}
 
           {isContainer(step) && (
@@ -1427,6 +1586,61 @@ const updateStep = (id, patch) =>
 
             </div>
           )}
+
+          {(step.type === "manualCheckpoint" || step.type === "wait") && (
+            <div className="p-2 rounded border bg-amber-50">
+              <div className="font-semibold text-amber-700">
+                {step.name || step.label || (step.type === "manualCheckpoint" ? "Manual Checkpoint" : "Wait")}
+              </div>
+              <div className="text-xs text-gray-600 mb-1">
+                <strong>ID:</strong> <code>{step.id}</code>
+              </div>
+              {step.message && (
+                <div className="text-xs text-gray-700 mb-1">
+                  <strong>Message:</strong> {step.message}
+                </div>
+              )}
+              {step.waitForUrlContains && (
+                <div className="text-xs text-gray-700 mb-1">
+                  <strong>Wait for URL contains:</strong> <code>{step.waitForUrlContains}</code>
+                </div>
+              )}
+              {step.waitForSelector && (
+                <div className="text-xs text-gray-700 mb-1">
+                  <strong>Wait for selector:</strong> <code>{step.waitForSelector}</code>
+                </div>
+              )}
+              {step.timeoutMs != null && (
+                <div className="text-xs text-gray-700">
+                  <strong>Timeout:</strong> {step.timeoutMs} ms
+                </div>
+              )}
+              {step.pollMs != null && (
+                <div className="text-xs text-gray-700">
+                  <strong>Poll:</strong> {step.pollMs} ms
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isContainer(step) && !KNOWN_RENDER_TYPES.has(stepTypeKey) && (
+            <div className="p-2 rounded border bg-gray-50">
+              <div className="font-semibold text-gray-700">
+                {step.name || step.label || "Unsupported step"}
+              </div>
+              <div className="text-xs text-gray-600 mb-1">
+                <strong>Type:</strong> <code>{step.type || "unknown"}</code>
+              </div>
+              {step.message && (
+                <div className="text-xs text-gray-700 mb-1">
+                  <strong>Message:</strong> {step.message}
+                </div>
+              )}
+              <div className="text-xs text-gray-500">
+                This step type does not have a custom renderer yet.
+              </div>
+            </div>
+          )}
        
         </div>
 
@@ -1449,9 +1663,65 @@ const updateStep = (id, patch) =>
     <section className="col-span-1 bg-white p-4 rounded shadow flex flex-col h-full min-h-0 overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <h2 className="text-lg font-semibold mb-4">Steps</h2>
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleUndo}
+            disabled={!undoStack.length}
+            className="rounded border px-2 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Undo (Ctrl/Cmd+Z)"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            onClick={handleRedo}
+            disabled={!redoStack.length}
+            className="rounded border px-2 py-1 text-xs text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+          >
+            Redo
+          </button>
+        </div>
+        <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+          <input
+            className="rounded border px-2 py-1 text-xs"
+            placeholder="Search steps, labels, selectors..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          <select
+            className="rounded border px-2 py-1 text-xs"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
+            <option value="all">All step types</option>
+            <option value="uiaction">UI Action</option>
+            <option value="navigate">Navigate</option>
+            <option value="gridextract">Grid Extract</option>
+            <option value="apiextract">API Extract</option>
+            <option value="importdata">Import Data</option>
+            <option value="exportdata">Export Data</option>
+            <option value="dataloop">Data Loop</option>
+            <option value="counterloop">Counter Loop</option>
+            <option value="keyvalueextract">Key Value Extract</option>
+            <option value="keyvaluecollect">Key Value Collect</option>
+            <option value="manualcheckpoint">Manual Checkpoint</option>
+            <option value="wait">Wait</option>
+          </select>
+          <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              checked={showOnlyInvalid}
+              onChange={(e) => setShowOnlyInvalid(e.target.checked)}
+            />
+            Show only invalid
+          </label>
+        </div>
         <ul className="space-y-2 text-sm">
           {steps
             .filter((step) => step.parentId === undefined || step.parentId === null)
+            .filter((step) => matchedTopLevelIds.has(step.id))
             .map((step) => renderStep(step))}
         </ul>
 
@@ -1503,7 +1773,7 @@ const updateStep = (id, patch) =>
               setPendingStep(null);
             }}
             onSave={(newValue) => {
-              setSteps(prev =>
+              commitSteps(prev =>
                 prev.map(s => {
                   if (s.id !== pendingStep.id) return s;
 
@@ -1521,7 +1791,7 @@ const updateStep = (id, patch) =>
 
                   return updated;
                 })
-              );
+              , "Edit step value");
 
               setShowParamModal(false);
               setPendingStep(null);

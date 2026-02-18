@@ -52,6 +52,32 @@ function StepEditorModalInner({ step, onClose, onSave }) {
     />
   );
 
+  const NumberText = ({ defaultValue, onBufferedChange, placeholder, min, step = 1 }) => (
+    <input
+      type="number"
+      min={min}
+      step={step}
+      defaultValue={defaultValue ?? ""}
+      placeholder={placeholder}
+      className="w-full rounded border px-3 py-2 text-sm"
+      onChange={(e) => onBufferedChange && onBufferedChange(e.target.value)}
+    />
+  );
+
+  const Select = ({ defaultValue, onBufferedChange, options = [] }) => (
+    <select
+      defaultValue={defaultValue ?? ""}
+      className="w-full rounded border px-3 py-2 text-sm"
+      onChange={(e) => onBufferedChange && onBufferedChange(e.target.value)}
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  );
+
   const TextArea = ({
     readOnly = false,
     className = "",
@@ -108,6 +134,19 @@ function StepEditorModalInner({ step, onClose, onSave }) {
       try { out.columnMappings = JSON.parse(formBuf.current.columnMappingsRaw || "[]"); }
       catch { throw new Error("columnMappings must be JSON array"); }
       delete out.columnMappingsRaw;
+    }
+    const numericKeys = ["timeoutMs", "pollMs", "delayMs", "retryCount"];
+    for (const key of numericKeys) {
+      if (key in formBuf.current) {
+        const raw = formBuf.current[key];
+        if (raw === "" || raw == null) {
+          out[key] = undefined;
+        } else {
+          const n = Number(raw);
+          if (!Number.isFinite(n)) throw new Error(`${key} must be a valid number`);
+          out[key] = n;
+        }
+      }
     }
     return out;
   }
@@ -184,17 +223,39 @@ function StepEditorModalInner({ step, onClose, onSave }) {
             <Text readOnly defaultValue={draft.url} placeholder="https://..." />
           </Field>
           <Field label="Open In">
-            <Text
+            <Select
               defaultValue={draft.openIn || "same-tab"}
               onBufferedChange={(v) => put("openIn", v)}
-              placeholder="same-tab | new-tab | new-window"
+              options={[
+                { label: "Same tab", value: "same-tab" },
+                { label: "New tab", value: "new-tab" },
+                { label: "New window", value: "new-window" },
+              ]}
+            />
+          </Field>
+          <Field label="Wait Until">
+            <Select
+              defaultValue={draft.waitUntil || "domcontentloaded"}
+              onBufferedChange={(v) => put("waitUntil", v)}
+              options={[
+                { label: "DOM content loaded", value: "domcontentloaded" },
+                { label: "Page load", value: "load" },
+                { label: "Network idle", value: "networkidle" },
+              ]}
+            />
+          </Field>
+          <Field label="Timeout (ms)">
+            <NumberText
+              defaultValue={draft.timeoutMs ?? 15000}
+              min={0}
+              onBufferedChange={(v) => put("timeoutMs", v)}
             />
           </Field>
         </div>
       )}
 
       {type === "uiAction" && (
-        <div className="mt-4 grid grid-cols-1 md-grid-cols-2 gap-3">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Action">
             <Text
               readOnly
@@ -214,12 +275,94 @@ function StepEditorModalInner({ step, onClose, onSave }) {
           <Field label="Improved Selector">
             <Text defaultValue={draft.improvedSelector ?? ""} onBufferedChange={(v) => put("improvedSelector", v)} />
           </Field>
-          <Field label="DevTools Selector">
-            <Text defaultValue={draft.devToolsSelector ?? ""} onBufferedChange={(v) => put("devToolsSelector", v)} />
+          <Field label="Timeout (ms)">
+            <NumberText
+              defaultValue={draft.timeoutMs ?? ""}
+              min={0}
+              onBufferedChange={(v) => put("timeoutMs", v)}
+            />
+          </Field>
+          <Field label="Step Delay (ms)">
+            <NumberText
+              defaultValue={draft.delayMs ?? ""}
+              min={0}
+              onBufferedChange={(v) => put("delayMs", v)}
+            />
+          </Field>
+          <Field label="Retries">
+            <NumberText
+              defaultValue={draft.retryCount ?? ""}
+              min={0}
+              onBufferedChange={(v) => put("retryCount", v)}
+            />
           </Field>
           <div className="mt-2 flex items-center gap-4">
             <Toggle defaultChecked={!!draft.waitForNav} onBufferedChange={(c) => put("waitForNav", c)} label="Wait for navigation" />
             <Toggle defaultChecked={!!draft.optional}  onBufferedChange={(c) => put("optional", c)}  label="Optional (skip on fail)" />
+          </div>
+        </div>
+      )}
+
+      {(type === "manualCheckpoint" || type === "wait") && (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Field label="Title">
+            <Text
+              defaultValue={draft.name ?? draft.label ?? ""}
+              onBufferedChange={(v) => {
+                put("name", v);
+                put("label", v);
+              }}
+              placeholder="Checkpoint title"
+            />
+          </Field>
+          <Field label="Message">
+            <TextArea
+              rows={3}
+              defaultValue={draft.message ?? ""}
+              onBufferedChange={(v) => put("message", v)}
+              placeholder="Instructions shown to user during wait"
+            />
+          </Field>
+          <Field label="Wait for URL contains">
+            <Text
+              defaultValue={draft.waitForUrlContains ?? ""}
+              onBufferedChange={(v) => put("waitForUrlContains", v)}
+              placeholder="/path/fragment"
+            />
+          </Field>
+          <Field label="Wait for selector">
+            <Text
+              defaultValue={draft.waitForSelector ?? ""}
+              onBufferedChange={(v) => put("waitForSelector", v)}
+              placeholder="css selector"
+            />
+          </Field>
+          <Field label="Timeout (ms)">
+            <NumberText
+              defaultValue={draft.timeoutMs ?? 120000}
+              min={0}
+              onBufferedChange={(v) => put("timeoutMs", v)}
+            />
+          </Field>
+          <Field label="Poll Interval (ms)">
+            <NumberText
+              defaultValue={draft.pollMs ?? 500}
+              min={50}
+              step={50}
+              onBufferedChange={(v) => put("pollMs", v)}
+            />
+          </Field>
+          <div className="mt-2 flex items-center gap-4">
+            <Toggle
+              defaultChecked={!!draft.continueOnTimeout}
+              onBufferedChange={(c) => put("continueOnTimeout", c)}
+              label="Continue on timeout"
+            />
+            <Toggle
+              defaultChecked={!!draft.optional}
+              onBufferedChange={(c) => put("optional", c)}
+              label="Optional (skip on fail)"
+            />
           </div>
         </div>
       )}

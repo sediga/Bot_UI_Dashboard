@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 /**
  * NavigateStep – config UI for a parameterized Navigate smart step.
@@ -22,6 +22,15 @@ export default function NavigateStep({ onCreate, onTest, onBack, onClose, parent
   // optional binding to dataset column from a prior extract
   const [bindSourceStepId, setBindSourceStepId] = useState("");
   const [bindColumn, setBindColumn] = useState("");
+
+  useEffect(() => {
+    if (!initial) return;
+    setStepName(initial.stepName || "Navigate");
+    setNavUrl(initial.url || "");
+    setNavTarget(initial.target || "newTab");
+    setNavWaitUntil(initial.waitUntil || "domcontentloaded");
+    setNavTimeout(Number(initial.timeoutMs) || 15000);
+  }, [initial]);
 
   const availableCols = useMemo(() => {
     const src = availableExtractSteps.find((s) => s.id === bindSourceStepId);
@@ -177,7 +186,7 @@ export default function NavigateStep({ onCreate, onTest, onBack, onClose, parent
       </div>
 
       <div className="flex justify-between mt-4">
-        <button onClick={onBack} className="text-sm text-gray-600">
+        <button onClick={onBack || onClose} className="text-sm text-gray-600">
           ← Back
         </button>
         <button
@@ -185,7 +194,7 @@ export default function NavigateStep({ onCreate, onTest, onBack, onClose, parent
           className="bg-green-600 text-white px-4 py-1 rounded"
           disabled={!canSubmit}
         >
-          Add Navigate Step
+          {mode === "edit" ? "Save step" : "Add Navigate Step"}
         </button>
       </div>
     </div>

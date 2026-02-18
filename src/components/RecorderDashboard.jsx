@@ -25,6 +25,8 @@ export default function RecorderDashboard() {
   const [pendingTab, setPendingTab] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const isRecording = agentStatus === "recording";
+  const [isStoppingPlayback, setIsStoppingPlayback] = useState(false);
+  const canStopPlayback = ["replaying", "recording", "running"].includes(agentStatus);
   const [replayMessages, setReplayMessages] = useState([]);
   const [recordMessages, setRecordMessages] = useState([]);
   const activeTabRef = useRef(activeTab);
@@ -49,8 +51,35 @@ export default function RecorderDashboard() {
       const result = await res.json();
       console.log("Recording stopped:", result);
       setAgentStatus("idle");
+      setCurrentLoopId(null);
     } catch (err) {
       console.error("Failed to stop recording:", err);
+    }
+  };
+
+  const stopReplayOrPreview = async () => {
+    if (isStoppingPlayback) return;
+    setIsStoppingPlayback(true);
+    try {
+      const res = await fetch(`${config.agentServerUrl}/api/local-run/stop`, {
+        method: "POST",
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        console.log("No active local run to stop:", result);
+        return;
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status}${text ? ` - ${text}` : ""}`);
+      }
+      console.log("Playback stop response:", result);
+      setAgentStatus("idle");
+    } catch (err) {
+      console.error("Failed to stop replay/preview:", err);
+      alert("Could not stop replay/preview.");
+    } finally {
+      setIsStoppingPlayback(false);
     }
   };
 
@@ -422,24 +451,39 @@ export default function RecorderDashboard() {
       {/* Tabs (static top, not clipped) */}
       <div className="shrink-0">
         <div className="bg-white border-b px-6 py-2">
-          <nav className="flex space-x-2" aria-label="Tabs">
-            {["create", "replay", "runs", "config"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => handleTabChange(tab)}
-                className={`px-4 py-2 rounded-t-md text-sm font-medium ${
-                  activeTab === tab
-                    ? "bg-indigo-100 text-indigo-700 shadow-inner border border-b-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                {tab === "create" && "Create Flow"}
-                {tab === "replay" && "Replay"}
-                {tab === "runs" && "Runs"}
-                {tab === "config" && "Configure"}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center justify-between gap-3">
+            <nav className="flex space-x-2" aria-label="Tabs">
+              {["create", "replay", "runs", "config"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => handleTabChange(tab)}
+                  className={`px-4 py-2 rounded-t-md text-sm font-medium ${
+                    activeTab === tab
+                      ? "bg-indigo-100 text-indigo-700 shadow-inner border border-b-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {tab === "create" && "Create Flow"}
+                  {tab === "replay" && "Replay"}
+                  {tab === "runs" && "Runs"}
+                  {tab === "config" && "Configure"}
+                </button>
+              ))}
+            </nav>
+            <button
+              type="button"
+              onClick={stopReplayOrPreview}
+              disabled={isStoppingPlayback || !canStopPlayback}
+              className={`px-3 py-2 rounded text-sm font-medium ${
+                isStoppingPlayback || !canStopPlayback
+                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                  : "bg-red-600 text-white hover:bg-red-700"
+              }`}
+              title="Stop currently running replay or preview"
+            >
+              {isStoppingPlayback ? "Stopping..." : "Stop Replay/Preview"}
+            </button>
+          </div>
         </div>
       </div>
 

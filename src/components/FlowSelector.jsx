@@ -2,29 +2,35 @@
 import { useState, useEffect } from "react";
 import config from "../config";
 
-export default function FlowSelector({ value, onChange, label = "Select Flow", className = "", showLabel = true, fetchedFlows = []}) {
+export default function FlowSelector({ value, onChange, label = "Select Flow", className = "", showLabel = true, fetchedFlows = null}) {
   const [flows, setFlows] = useState([]);
   const token = localStorage.getItem("botflows_token");
 
   useEffect(() => {
     const fetchFlows = async () => {
       try {
-        if(fetchedFlows && fetchedFlows.length > 0)
-        {
-            setFlows(fetchedFlows)
+        if (Array.isArray(fetchedFlows) && fetchedFlows.length > 0) {
+          setFlows(Array.isArray(fetchedFlows) ? fetchedFlows : []);
+          return;
         }
-        else
-        {
-            const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, {
+
+        const auth = token
+          ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`)
+          : "";
+        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, {
             headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "x-api-key": config.apiKey,
+              Authorization: auth,
+              "Content-Type": "application/json",
+              "x-api-key": config.apiKey,
             },
-            });
-            const data = await res.json();
-            setFlows(data);
+        });
+        if (!res.ok) {
+          console.error(`Failed to load flows: HTTP ${res.status}`);
+          setFlows([]);
+          return;
         }
+        const data = await res.json();
+        setFlows(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Failed to load flows:", err);
         setFlows([]);
@@ -32,7 +38,7 @@ export default function FlowSelector({ value, onChange, label = "Select Flow", c
     };
 
     fetchFlows();
-  }, []);
+  }, [token, fetchedFlows]);
 
   return (
     <div className={className}>
