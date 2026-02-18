@@ -5,6 +5,14 @@ import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
 import SecretMapperModal from "./smartsteps/SecretMapperModal";
 import { makeSelectorLlmHelper } from "../helpers/selectorLlmHelper";
+import {
+  getFlowExecutionStatus,
+  listFlows,
+  loadFlow as loadFlowFromApi,
+  saveFlow,
+  syncFlowIdMetadata,
+} from "../utils/flowApi";
+import { normalizeStep, toFlowPayload, validateFlowSteps } from "../utils/flowSchema";
 
 export default function StepBuilder({
   onEnsureWebSocket,
@@ -39,6 +47,8 @@ export default function StepBuilder({
   const [loopColumns, setLoopColumns] = useState([]);
   const [secretCtx, setSecretCtx] = useState(null);      
   const [showSecretModal, setShowSecretModal] = useState(false);
+  const [isFetchingFlows, setIsFetchingFlows] = useState(false);
+  const [loadedFlowMeta, setLoadedFlowMeta] = useState({ flowId: "", flowPath: "" });
 
   const token = localStorage.getItem("botflows_token");
   // const [logs, setLogs] = useState([]);
@@ -54,9 +64,25 @@ export default function StepBuilder({
   const seenSecretIdsRef = useRef(new Set());
   const llmRef = useRef(null);
 
-  const [showLoadPopup, setShowLoadPopup] = useState(false);
-  const [loadText, setLoadText] = useState("");
+  const [validationSummary, setValidationSummary] = useState("");
   const fileInputRef = useRef(null);
+
+  const fetchFlows = async () => {
+    setIsFetchingFlows(true);
+    try {
+      const data = await listFlows();
+      setAvailableFlows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load flows:", err);
+      setAvailableFlows([]);
+    } finally {
+      setIsFetchingFlows(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFlows();
+  }, [token]);
 
   useEffect(() => {
     llmRef.current = makeSelectorLlmHelper({
@@ -298,7 +324,7 @@ useEffect(() => {
               setShowSecretModal(true);
             }
 
-            newSteps.push(step);
+            newSteps.push(normalizeStep(step));
            
             try {
               const actionStr = typeof step.action === "string" ? step.action.toLowerCase() : "";
@@ -332,7 +358,7 @@ useEffect(() => {
       
 
       if (newSteps.length > 0) {
-        setSteps(prev => [...prev, ...newSteps]);
+        setSteps(prev => validateFlowSteps([...prev, ...newSteps]).steps);
       }
 
     }, 100); // Adjust interval if needed
@@ -366,11 +392,11 @@ useEffect(() => {
 
     try {
       clearSteps();
-      const navigateStep = {
+      const navigateStep = normalizeStep({
         id: crypto.randomUUID(),
         type: "navigate",
         url: formattedUrl,
-      };
+      });
       addStep(navigateStep);
       setCurrentLoopId?.(navigateStep.id);
       const authType = config.authType || "jwt";
@@ -406,14 +432,14 @@ useEffect(() => {
       ? { type: "counter", count: loopCount }
       : { type: loopType };
 
-    const loopStep = {
+    const loopStep = normalizeStep({
       id,
       type: "counterloop",
       action: "counterloop",
       source: loopName.trim(),
       criteria,
       steps: [],
-    };
+    });
 
     addStep(loopStep);
     setCurrentLoopId(id);
@@ -423,29 +449,19 @@ useEffect(() => {
   const handleSave = async () => {
     if (!saveFileName.trim()) return;
     const cleanName = saveFileName.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+    const validated = validateFlowSteps(steps);
+    setSteps(validated.steps);
+    if (validated.hasErrors) {
+      setValidationSummary("Fix step validation issues before saving.");
+      alert("Cannot save: some steps are invalid. Please review highlighted steps.");
+      return;
+    }
 
     try {
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "x-api-key": `${config.apiKey}` // Load from env later
-      };
-      const res = await fetch(`${config.apiBaseUrl}/api/flows/save`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ filename: cleanName, steps }),
-      });
-
-      // const resAgent = await fetch(`${config.agentServerUrl}/api/stop`, {
-      //   method: "POST",
-      //   headers
-      // });
-      // if (!resAgent.ok) throw new Error("Failed to stop recording");
-
-      const data = await res.json();
+      const data = await saveFlow(cleanName, validated.steps);
+      setValidationSummary("");
       alert(data.message || "Flow saved.");
-      // setUrlInput("");
-      // clearSteps();
+      await fetchFlows();
     } catch (err) {
       console.error("Failed to save flow:", err);
       alert("Error saving flow");
@@ -457,65 +473,123 @@ useEffect(() => {
 
   const handlePreviewReplay = async () => {
     try {
+      const validated = validateFlowSteps(steps);
+      if (validated.hasErrors) {
+        // keep this only for invalid cases so errors can be reviewed in the UI
+        setSteps(validated.steps);
+        setValidationSummary("Fix step validation issues before preview.");
+        alert("Cannot preview: some steps are invalid. Please review highlighted steps.");
+        return;
+      }
+      window.dispatchEvent(new Event("flowtra:preview-start"));
       const authType = config.authType || "jwt";
       await onEnsureWebSocket("event");
       await onEnsureWebSocket("log");
 
+      const normalizedToken = token?.startsWith("Bearer ")
+        ? token.slice("Bearer ".length)
+        : token;
       const headers = {
         "Content-Type": "application/json",
+        "x-api-key": `${config.apiKey || ""}`,
       };
 
       if (authType === "jwt") {
-        headers["Authorization"] = `Bearer ${token}`;
+        headers["Authorization"] = normalizedToken ? `Bearer ${normalizedToken}` : "";
       } else if (authType === "api_key") {
-        headers["x-api-key"] = token;
+        headers["x-api-key"] = normalizedToken || `${config.apiKey || ""}`;
       }
 
-      const resOverlay = await fetch(`${config.agentServerUrl}/api/overlay/show`, {
+      await fetch(`${config.agentServerUrl}/api/overlay/show`, {
         method: "POST",
         headers,
         body: JSON.stringify({ message: "Previewing now, Will resume after..." }),
-      });
-      console.log(`overlay response : (${ resOverlay.json()})`)
+      }).catch(() => {});
+
+      const payload = toFlowPayload(validated.steps);
+      const selectedFlowMeta = availableFlows.find((f) => f.path === selectedFlow) || {};
+      if (selectedFlow) {
+        try {
+          const status = await getFlowExecutionStatus(selectedFlow);
+          if (status?.isExecutionEnabled === false) {
+            const msg = "Preview blocked: flow execution is disabled by admin policy.";
+            setValidationSummary(msg);
+            alert(msg);
+            return;
+          }
+        } catch (statusErr) {
+          console.warn("Execution status precheck unavailable. Continuing preview.", statusErr);
+        }
+      }
       const res = await fetch(`${config.agentServerUrl}/api/preview-replay`, {
         method: "POST",
         headers,
-        body: JSON.stringify(steps),
+        body: JSON.stringify({
+          steps: payload,
+          flowPath: selectedFlow || undefined,
+          flowId: selectedFlowMeta.id || undefined,
+          triggerType: "manual",
+        }),
       });
 
-      const resOverlayStop = await fetch(`${config.agentServerUrl}/api/overlay/hide`, {
+      await fetch(`${config.agentServerUrl}/api/overlay/hide`, {
         method: "POST",
         headers
-      });
+      }).catch(() => {});
       
-      const result = await res.json();
-      if (result.status !== "ok") {
-        alert("Preview failed: " + result.details);
+      if (!res.ok) {
+        const rawText = await res.text().catch(() => "");
+        let detail = rawText;
+        try {
+          const parsed = JSON.parse(rawText);
+          detail = parsed?.detail || parsed?.error || rawText;
+        } catch {
+          // keep raw text fallback
+        }
+        throw new Error(detail || `HTTP ${res.status}`);
       }
+
+      const result = await res.json().catch(() => ({}));
+      if (result.status !== "ok") {
+        const msg = "Preview failed: " + (result.details || "Agent returned a non-ok status.");
+        setValidationSummary(msg);
+        alert(msg);
+        return;
+      }
+      setValidationSummary("");
     } catch (err) {
       console.error("Preview replay error:", err);
-      alert("Preview replay failed.");
+      const msg = err?.message || "Preview replay failed.";
+      setValidationSummary(msg);
+      alert(msg);
+    } finally {
+      window.dispatchEvent(new Event("flowtra:preview-end"));
     }
   };
 
 const loadFlow = async (selectedFlow) => {
     if (!selectedFlow) return;
+    if (steps.length > 0) {
+      const ok = window.confirm("Loading this flow will replace current steps. Continue?");
+      if (!ok) return;
+    }
     try {
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "x-api-key": `${config.apiKey}` // Load from env later
-      };
-      const res = await fetch(`${config.apiBaseUrl}/api/flows/load?path=${encodeURIComponent(selectedFlow)}`, {
-        headers: headers,
-      });
-      const data = await res.json();
-      if (!Array.isArray(data)) throw new Error("Invalid flow data");
-
+      const data = await loadFlowFromApi(selectedFlow);
+      const selectedFlowMeta = availableFlows.find((f) => f.path === selectedFlow) || {};
+      const validated = validateFlowSteps(data);
       clearSteps();
-      data.forEach((step) => addStep(step));
+      validated.steps.forEach((step) => addStep(step));
+      setLoadedFlowMeta({
+        flowId: String(selectedFlowMeta.id || ""),
+        flowPath: selectedFlow || "",
+      });
+      if (validated.hasErrors) {
+        setValidationSummary("Loaded flow has validation issues. Review highlighted steps.");
+      } else {
+        setValidationSummary("");
+      }
 
-      const firstNavStep = data.find(step => step.type === "navigate");
+      const firstNavStep = validated.steps.find(step => step.type === "navigate");
       if (firstNavStep?.url) {
         setUrlInput(firstNavStep.url);
       }
@@ -525,15 +599,26 @@ const loadFlow = async (selectedFlow) => {
     }
   };
 
-    // === Load JSON helpers ===
-  const applyLoadedSteps = (arr) => {
-    if (!Array.isArray(arr)) throw new Error("Invalid flow JSON: expected an array of steps[]");
-    // clear then add
-    clearSteps();                    // you already have this
-    arr.forEach((s) => addStep(s));  // and this
+  const applyLoadedSteps = (payload) => {
+    const isArray = Array.isArray(payload);
+    const isObjectWithSteps = payload && typeof payload === "object" && Array.isArray(payload.steps);
+    if (!isArray && !isObjectWithSteps) throw new Error("Invalid flow JSON: expected steps[] or { steps: [] }");
+    const sourceSteps = isArray ? payload : payload.steps;
+    const validated = validateFlowSteps(sourceSteps);
+    clearSteps();
+    validated.steps.forEach((s) => addStep(s));
+    setValidationSummary(validated.hasErrors ? "Loaded JSON has validation issues. Review highlighted steps." : "");
+    if (isObjectWithSteps) {
+      setLoadedFlowMeta({
+        flowId: String(payload.flowId || payload.id || ""),
+        flowPath: String(payload.flowPath || ""),
+      });
+    } else {
+      setLoadedFlowMeta({ flowId: "", flowPath: "" });
+    }
 
     // set URL from first navigate step (optional)
-    const firstNav = arr.find((s) => s.type?.toLowerCase?.() === "navigate" && s.url);
+    const firstNav = validated.steps.find((s) => s.type?.toLowerCase?.() === "navigate" && s.url);
     if (firstNav?.url) setUrlInput(firstNav.url); // assumes you have setUrlInput / urlInput state
   };
 
@@ -541,6 +626,10 @@ const loadFlow = async (selectedFlow) => {
     try {
       const f = e.target.files?.[0];
       if (!f) return;
+      if (steps.length > 0) {
+        const ok = window.confirm("Importing JSON will replace current steps. Continue?");
+        if (!ok) return;
+      }
       const text = await f.text();
       const data = JSON.parse(text);
       applyLoadedSteps(data);
@@ -552,16 +641,46 @@ const loadFlow = async (selectedFlow) => {
     }
   };
 
-  const handleLoadFromText = () => {
-    try {
-      const data = JSON.parse(loadText);
-      applyLoadedSteps(data);
-      setShowLoadPopup(false);
-      setLoadText("");
-    } catch (err) {
-      console.error(err);
-      alert("Invalid JSON. Paste an array of steps.");
+  const handleExportJson = async () => {
+    if (!steps.length) return;
+    const validated = validateFlowSteps(steps);
+    setSteps(validated.steps);
+    if (validated.hasErrors) {
+      setValidationSummary("Exported flow contains validation issues. Review highlighted steps.");
     }
+
+    const payload = toFlowPayload(validated.steps);
+    const selectedFlowMeta = availableFlows.find((f) => f.path === selectedFlow) || {};
+    const flowId =
+      String(selectedFlowMeta.id || loadedFlowMeta.flowId || "") ||
+      (typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : "");
+    const flowPath = selectedFlow || loadedFlowMeta.flowPath || "";
+    if (flowPath && flowId) {
+      try {
+        await syncFlowIdMetadata(flowPath, flowId);
+      } catch (err) {
+        console.warn("Flow ID metadata sync failed. Continuing export.", err);
+      }
+    }
+    const flowJson = {
+      flowId,
+      flowPath: flowPath || undefined,
+      steps: payload,
+    };
+    const selectedBase = selectedFlow ? selectedFlow.split("/").pop()?.replace(/\.json$/i, "") : "";
+    const fallback = saveFileName.trim() || selectedBase || "flow";
+    const base = fallback.replace(/[^\w.-]/g, "_") || "flow";
+    const filename = base.toLowerCase().endsWith(".json") ? base : `${base}.json`;
+
+    const blob = new Blob([JSON.stringify(flowJson, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -585,6 +704,7 @@ const loadFlow = async (selectedFlow) => {
             onClick={handleNavigate}
             className="px-4 py-2 rounded bg-indigo-600 text-white"
             title="Start/continue recording on the URL above"
+            disabled={!urlInput.trim()}
           >
             Record
           </button>
@@ -593,6 +713,7 @@ const loadFlow = async (selectedFlow) => {
             onClick={() => setShowSavePopup(true)}
             className="px-4 py-2 rounded bg-emerald-600 text-white"
             title="Save current steps"
+            disabled={steps.length === 0}
           >
             Save
           </button>
@@ -601,6 +722,7 @@ const loadFlow = async (selectedFlow) => {
             onClick={handlePreviewReplay}
             className="px-4 py-2 rounded bg-purple-600 text-white"
             title="Preview the current flow"
+            disabled={steps.length === 0}
           >
             Preview
           </button>
@@ -611,7 +733,16 @@ const loadFlow = async (selectedFlow) => {
             className="px-4 py-2 rounded bg-gray-800 text-white"
             title="Load steps from a local JSON file"
           >
-            Load
+            Import JSON
+          </button>
+
+          <button
+            onClick={handleExportJson}
+            className="px-4 py-2 rounded border border-gray-300 bg-white text-gray-800"
+            title="Export current steps as JSON"
+            disabled={steps.length === 0}
+          >
+            Export JSON
           </button>
           <input
             ref={fileInputRef}
@@ -620,15 +751,6 @@ const loadFlow = async (selectedFlow) => {
             className="hidden"
             onChange={handleLoadFile}
           />
-
-          {/* NEW: Paste JSON */}
-          <button
-            onClick={() => setShowLoadPopup(true)}
-            className="px-3 py-2 rounded border border-gray-300 text-gray-800 bg-white"
-            title="Paste JSON steps"
-          >
-            Paste JSON
-          </button>
 
         </div>
 
@@ -639,7 +761,28 @@ const loadFlow = async (selectedFlow) => {
             loadFlow(val);
           }}
           label="Select Flow"
+          fetchedFlows={availableFlows}
         />
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>
+            {isFetchingFlows
+              ? "Refreshing flows..."
+              : (availableFlows.length ? `${availableFlows.length} saved flows` : "No saved flows found")}
+          </span>
+          <button
+            onClick={fetchFlows}
+            className="rounded border border-gray-300 px-2 py-1 text-gray-700 hover:bg-gray-100"
+            disabled={isFetchingFlows}
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+        {validationSummary && (
+          <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {validationSummary}
+          </div>
+        )}
       </div>
 
       {/* Save Popup */}
@@ -661,37 +804,9 @@ const loadFlow = async (selectedFlow) => {
           </div>
         </div>
       )}
-      {showLoadPopup && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl w-[min(90vw,48rem)] p-4">
-            <div className="text-lg font-semibold mb-2">Load Steps from JSON</div>
-            <textarea
-              className="w-full h-64 border rounded p-2 font-mono text-sm"
-              value={loadText}
-              onChange={(e) => setLoadText(e.target.value)}
-              placeholder='Paste an array of steps, e.g. [{ "type": "navigate", "url": "https://..." }, ...]'
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                onClick={() => setShowLoadPopup(false)}
-                className="px-3 py-2 rounded border"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleLoadFromText}
-                className="px-3 py-2 rounded bg-indigo-600 text-white"
-              >
-                Load
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Scrollable logs area */}
       <div className="flex-1 min-h-0 mt-4 overflow-y-auto">
-        <StatusPanel status={agentStatus} logs={logs} />
+        <StatusPanel status={agentStatus} logs={logs} onClear={() => setLogs([])} />
       </div>
 
 {showSecretModal && secretCtx && (

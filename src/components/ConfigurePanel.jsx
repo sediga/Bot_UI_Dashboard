@@ -1,649 +1,743 @@
-import { useEffect, useState } from "react";
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import defaultConfig from "../config/botflows_config";
 import FlowSelector from "./FlowSelector";
 import config from "../config";
+import { useAuth } from "../contexts/AuthContext";
 
-export default function ConfigurePanel() {
-  const [userConfig, setConfig] = useState(defaultConfig);
-  const [collapsedSections, setCollapsedSections] = useState({
-    agent: true,
-    replay: true,
-    advanced: true,
-    integrations: true,
-    schedule: false,
-  });
-  const [selectedFlow, setSelectedFlow] = useState("");
-  const [timezone, setTimezone] = useState("America/Chicago"); // default or empty string
-    const usTimezones = [
-    "America/New_York",     // Eastern Time
-    "America/Chicago",      // Central Time
-    "America/Denver",       // Mountain Time
-    "America/Phoenix",      // Mountain Time (no DST)
-    "America/Los_Angeles",  // Pacific Time
-    "America/Anchorage",    // Alaska Time
-    "Pacific/Honolulu"      // Hawaii Time
-    ];
-    const [schedules, setSchedules] = useState(userConfig.schedule?.items || []);
-    const [flows, setFlows] = useState([]);
-    const [flowNameMap, setFlowNameMap] = useState({});
+const US_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+];
 
-    useEffect(() => {
-    const fetchFlows = async () => {
-        try {
-        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, {
-            headers: {
-            Authorization: `Bearer ${localStorage.getItem("botflows_token")}`,
-            "Content-Type": "application/json",
-            "x-api-key": config.apiKey,
-            },
-        });
-        const data = await res.json();
-        setFlows(data);
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-        // Create name map
-        const map = {};
-        data.forEach((f) => (map[f.path] = f.name));
-        setFlowNameMap(map);
-        } catch (err) {
-        console.error("Failed to load flows:", err);
-        }
-    };
-
-    fetchFlows();
-    }, []);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("botflows_config");
-
-    if (saved) {
-        try {
-        const parsed = JSON.parse(saved);
-
-        const savedVersion = parsed.version || 0;
-        const defaultVersion = defaultConfig.version;
-
-        if (savedVersion < defaultVersion) {
-            // merge and upgrade
-            const merged = { ...defaultConfig, ...parsed };
-            for (const key of Object.keys(defaultConfig)) {
-            if (
-                typeof defaultConfig[key] === "object" &&
-                parsed[key] &&
-                !Array.isArray(defaultConfig[key])
-            ) {
-                merged[key] = { ...defaultConfig[key], ...parsed[key] };
-            }
-            }
-            localStorage.setItem("botflows_config", JSON.stringify(merged));
-            setConfig(merged);
-        } else {
-            setConfig(parsed);
-        }
-        } catch {
-        console.warn("Invalid userConfig in storage, using defaults");
-        setConfig(defaultConfig);
-        }
-    } else {
-        setConfig(defaultConfig);
-    }
-    }, []);
-    
-    useEffect(() => {
-    loadUserConfig();
-    }, []);
-
-
-  const updateSetting = (path, value) => {
-    setConfig((prev) => {
-      const updated = { ...prev };
-      const keys = path.split(".");
-      let curr = updated;
-      for (let i = 0; i < keys.length - 1; i++) {
-        curr = curr[keys[i]];
-      }
-      curr[keys.at(-1)] = value;
-      return updated;
+function deepMerge(base, override) {
+  if (Array.isArray(base)) return Array.isArray(override) ? override : base;
+  if (base && typeof base === "object") {
+    const merged = { ...base };
+    if (!override || typeof override !== "object") return merged;
+    Object.keys(override).forEach((key) => {
+      merged[key] = key in base ? deepMerge(base[key], override[key]) : override[key];
     });
-  };
-
-  const toggleSection = (key) => {
-    setCollapsedSections((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-const loadUserConfig = async () => {
-  try {
-    const response = await fetch(`${config.apiBaseUrl}/api/flows/load-config`, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("botflows_token")}`,
-        "x-api-key": `${config.apiKey}` // Load from env later
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to load user config");
-    }
-
-    const responseConfig = await response.json();
-    console.log("✅ Loaded userConfig", responseConfig);
-    setConfig(responseConfig); // assuming setConfig is your React setter
-    setSchedules(responseConfig.schedule?.items);
-  } catch (err) {
-    console.error("⚠️ Error loading userConfig:", err);
+    return merged;
   }
-};
+  return override === undefined ? base : override;
+}
 
-const handleSave = async () => {
-  const updated = { ...userConfig, schedule: { ...userConfig.schedule, items: schedules } };
+function cloneConfig(cfg) {
+  return JSON.parse(JSON.stringify(cfg));
+}
 
-  try {
-    const response = await fetch(`${config.apiBaseUrl}/api/flows/save-config`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("botflows_token")}`,
-        "x-api-key": `${config.apiKey}` // Load from env later
-      },
-      body: JSON.stringify({ Config: updated }),
-    });
+function toField(value, fallback = "") {
+  if (value && typeof value === "object" && "value" in value) return value;
+  return { value: value ?? fallback, enabled: true };
+}
 
-    const result = await response.json();
-    if (response.ok) {
-        alert("Configuration settings saved!")
-      console.log("✅", result.message);
-    } else {
-      console.error("❌", result.message);
-    }
-  } catch (err) {
-    console.error("⚠️ Failed to save userConfig:", err);
-  }
-};
-
-const getFlowDisplayName = (val) => {
-  if (!val?.enabled || !val.value) return "--";
-  return flowNameMap[val.value] || val.value;
-};
-
-
-const SectionCard = ({ title, sectionKey, children }) => {
-    const isEnabled = userConfig?.[sectionKey].enabled !== false; // default to true
-
-    if (!isEnabled) return null;
-
-    return (
-        <div className={`rounded-lg p-5 ${collapsedSections[sectionKey] ? "" : "bg-white shadow"}`}>
-        <div
-            className="flex justify-between items-center cursor-pointer"
-            onClick={() => toggleSection(sectionKey)}
-        >
-            <h2 className="text-md font-semibold text-purple-700">{title}</h2>
-            {collapsedSections[sectionKey] ? (
-            <ChevronDownIcon className="h-5 w-5 text-gray-500" />
-            ) : (
-            <ChevronUpIcon className="h-5 w-5 text-gray-500" />
-            )}
-        </div>
-        {!collapsedSections[sectionKey] && (
-            <div className="mt-4 space-y-3">{children}</div>
-        )}
-        </div>
-    );
-    };
-
-    const updateSchedule = (index, newSched) => {
-    setSchedules((prev) => {
-        const updated = [...prev];
-        updated[index] = newSched;
-        return updated;
-    });
-    };
-    
-    useEffect(() => {
-    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (usTimezones.includes(localTz)) {
-        setTimezone(localTz);
-        setNewSchedule((prev) => ({
-        ...prev,
-        timezone: localTz,
-        }));
-    }
-    }, []);
-
-    const [newSchedule, setNewSchedule] = useState({
+function createEmptySchedule(timezone = "America/Chicago") {
+  return {
     enabled: true,
     silent: true,
     flow: { value: "", enabled: true },
     type: { value: "", enabled: true },
     time: { value: "09:00", enabled: true },
     dayOfWeek: { value: [], enabled: false },
-    cron: { value: "", enabled: false }
+    cron: { value: "", enabled: false },
+    timezone,
+  };
+}
+
+function normalizeScheduleItem(item, timezone) {
+  const seed = createEmptySchedule(timezone);
+  if (!item || typeof item !== "object") return seed;
+
+  return {
+    ...seed,
+    ...item,
+    flow: toField(item.flow, ""),
+    type: toField(item.type, ""),
+    time: toField(item.time, "09:00"),
+    dayOfWeek: toField(item.dayOfWeek, []),
+    cron: toField(item.cron, ""),
+    silent:
+      typeof item.silent === "object" && item.silent !== null && "value" in item.silent
+        ? item.silent.value
+        : Boolean(item.silent ?? true),
+    timezone: item.timezone || timezone,
+  };
+}
+
+function sanitizeSchedule(raw, timezone) {
+  const normalized = normalizeScheduleItem(raw, timezone);
+  const typeValue = String(normalized.type?.value || "").trim();
+  const flowValue = String(normalized.flow?.value || "").trim();
+  const timeValue = String(normalized.time?.value || "").trim();
+  const cronValue = String(normalized.cron?.value || "").trim();
+  const days = Array.isArray(normalized.dayOfWeek?.value) ? normalized.dayOfWeek.value : [];
+
+  return {
+    ...normalized,
+    flow: { value: flowValue, enabled: true },
+    type: { value: typeValue, enabled: true },
+    time: { value: typeValue === "cron" ? "" : timeValue, enabled: typeValue !== "cron" },
+    cron: { value: typeValue === "cron" ? cronValue : "", enabled: typeValue === "cron" },
+    dayOfWeek: { value: typeValue === "weekly" ? days : [], enabled: typeValue === "weekly" },
+  };
+}
+
+function normalizeConfig(raw, timezone = "America/Chicago") {
+  const merged = deepMerge(cloneConfig(defaultConfig), raw || {});
+  const items = Array.isArray(merged.schedule?.items) ? merged.schedule.items : [];
+  merged.schedule = merged.schedule || {};
+  merged.schedule.items = items.filter(Boolean).map((item) => normalizeScheduleItem(item, timezone));
+  return merged;
+}
+
+export default function ConfigurePanel() {
+  const { user } = useAuth();
+  const [timezone, setTimezone] = useState("America/Chicago");
+  const [userConfig, setConfig] = useState(() => normalizeConfig(defaultConfig));
+  const [schedules, setSchedules] = useState([]);
+  const [baselineSchedulesHash, setBaselineSchedulesHash] = useState("[]");
+  const [newSchedule, setNewSchedule] = useState(() => createEmptySchedule("America/Chicago"));
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [flows, setFlows] = useState([]);
+  const [adminFlows, setAdminFlows] = useState([]);
+  const [adminSearch, setAdminSearch] = useState("");
+  const [adminStatusFilter, setAdminStatusFilter] = useState("all");
+  const [adminOwnerFilter, setAdminOwnerFilter] = useState("all");
+  const [flowNameMap, setFlowNameMap] = useState({});
+  const [message, setMessage] = useState(null);
+  const [updatingFlowId, setUpdatingFlowId] = useState("");
+
+  const schedulesHash = useMemo(() => JSON.stringify(schedules), [schedules]);
+  const isDirty = schedulesHash !== baselineSchedulesHash;
+  const isAdmin = useMemo(() => {
+    const roles = [];
+    if (user?.role) roles.push(user.role);
+    if (Array.isArray(user?.roles)) roles.push(...user.roles);
+    return roles.some((r) => String(r || "").toLowerCase() === "admin");
+  }, [user]);
+  const filteredAdminFlows = useMemo(() => {
+    const query = adminSearch.trim().toLowerCase();
+    return adminFlows.filter((flow) => {
+      const isEnabled = flow.isExecutionEnabled !== false;
+      const owner = flow.ownerEmail || "";
+      if (adminOwnerFilter !== "all" && owner !== adminOwnerFilter) return false;
+      if (adminStatusFilter === "enabled" && !isEnabled) return false;
+      if (adminStatusFilter === "disabled" && isEnabled) return false;
+      if (!query) return true;
+
+      const haystack = `${flow.name || ""} ${owner} ${flow.path || ""}`.toLowerCase();
+      return haystack.includes(query);
     });
-    
-    const [scheduleType, setScheduleType] = useState("manual");
-    useEffect(() => {
-        setScheduleType(newSchedule.type?.value);
-    }, [newSchedule.type?.value])
-    const allFields = ["silent", "flow", "type", "dayOfWeek", "time", "cron"];
+  }, [adminFlows, adminOwnerFilter, adminSearch, adminStatusFilter]);
+  const adminOwners = useMemo(() => {
+    return Array.from(
+      new Set(
+        adminFlows
+          .map((flow) => flow.ownerEmail || "")
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [adminFlows]);
+
+  const token = localStorage.getItem("botflows_token") || "";
+  const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+
+  const setLoadedSchedules = (items) => {
+    const next = Array.isArray(items) ? items : [];
+    setSchedules(next);
+    setBaselineSchedulesHash(JSON.stringify(next));
+  };
+
+  const validateSchedule = (candidate, excludeIndex = null) => {
+    const flowValue = String(candidate.flow?.value || "").trim();
+    const typeValue = String(candidate.type?.value || "").trim();
+    const timeValue = String(candidate.time?.value || "").trim();
+    const cronValue = String(candidate.cron?.value || "").trim();
+    const selectedDays = Array.isArray(candidate.dayOfWeek?.value) ? candidate.dayOfWeek.value : [];
+
+    if (!flowValue || !typeValue) return "Flow and schedule type are required.";
+    if ((typeValue === "daily" || typeValue === "weekly") && !timeValue) return "Time is required for daily/weekly schedules.";
+    if (typeValue === "weekly" && selectedDays.length === 0) return "Select at least one day for a weekly schedule.";
+    if (typeValue === "cron" && !cronValue) return "CRON expression is required.";
+
+    const duplicate = schedules.some((item, index) => {
+      if (excludeIndex !== null && index === excludeIndex) return false;
+      return item.flow?.value === flowValue;
+    });
+    if (duplicate) return "A schedule already exists for this flow.";
+
+    return "";
+  };
+
+  useEffect(() => {
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (US_TIMEZONES.includes(localTz)) {
+      setTimezone(localTz);
+      setNewSchedule((prev) => ({ ...prev, timezone: localTz }));
+    }
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("botflows_config");
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+      const normalized = normalizeConfig(parsed, timezone);
+      setConfig(normalized);
+      setLoadedSchedules(normalized.schedule?.items || []);
+    } catch {
+      setConfig(normalizeConfig(defaultConfig, timezone));
+      setLoadedSchedules([]);
+    }
+  }, [timezone]);
+
+  useEffect(() => {
+    const fetchFlows = async () => {
+      try {
+        const listRes = await fetch(`${config.apiBaseUrl}/api/flows/list`, {
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/json",
+            "x-api-key": config.apiKey,
+          },
+        });
+
+        if (!listRes.ok) {
+          setFlows([]);
+          setFlowNameMap({});
+          setAdminFlows([]);
+          return;
+        }
+
+        const flowData = await listRes.json();
+        const flowList = Array.isArray(flowData) ? flowData : [];
+        setFlows(flowList);
+
+        const map = {};
+        flowList.forEach((f) => {
+          map[f.path] = f.name;
+        });
+        setFlowNameMap(map);
+
+        if (isAdmin) {
+          const adminRes = await fetch(`${config.apiBaseUrl}/api/flows/execution-flags`, {
+            headers: {
+              Authorization: authHeader,
+              "Content-Type": "application/json",
+              "x-api-key": config.apiKey,
+            },
+          });
+
+          if (!adminRes.ok) {
+            setAdminFlows([]);
+            return;
+          }
+
+          const adminData = await adminRes.json();
+          setAdminFlows(Array.isArray(adminData) ? adminData : []);
+          return;
+        }
+
+        setAdminFlows([]);
+      } catch (err) {
+        console.error("Failed to load flows:", err);
+        setAdminFlows([]);
+      }
+    };
+
+    fetchFlows();
+  }, [authHeader, isAdmin]);
+
+  useEffect(() => {
+    const loadUserConfig = async () => {
+      try {
+        const response = await fetch(`${config.apiBaseUrl}/api/flows/load-config`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("botflows_token")}`,
+            "x-api-key": `${config.apiKey}`,
+          },
+        });
+
+        if (!response.ok) throw new Error("Failed to load user config");
+
+        const responseConfig = await response.json();
+        const normalized = normalizeConfig(responseConfig, timezone);
+        setConfig(normalized);
+        setLoadedSchedules(normalized.schedule?.items || []);
+      } catch (err) {
+        console.error("Error loading userConfig:", err);
+      }
+    };
+
+    loadUserConfig();
+  }, [timezone]);
+
+  const scheduleType = newSchedule.type?.value || "";
+
+  const getFlowDisplayName = (val) => {
+    const flowPath = val?.value || "";
+    if (!flowPath) return "--";
+    return flowNameMap[flowPath] || flowPath;
+  };
+
+  const resetNewSchedule = () => {
+    setNewSchedule(createEmptySchedule(timezone));
+  };
+
+  const handleAddSchedule = () => {
+    const next = sanitizeSchedule(newSchedule, timezone);
+    const validationError = validateSchedule(next);
+    if (validationError) {
+      setMessage({ type: "error", text: validationError });
+      return;
+    }
+
+    setSchedules((prev) => [...prev, next]);
+    resetNewSchedule();
+    setMessage({ type: "success", text: "Schedule added locally. Click Save Settings to persist." });
+  };
+
+  const handleStartEdit = (index) => {
+    setEditingIndex(index);
+    setEditingSchedule(normalizeScheduleItem(schedules[index], timezone));
+    setMessage(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditingSchedule(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingIndex === null || !editingSchedule) return;
+    const next = sanitizeSchedule(editingSchedule, timezone);
+    const validationError = validateSchedule(next, editingIndex);
+
+    if (validationError) {
+      setMessage({ type: "error", text: validationError });
+      return;
+    }
+
+    setSchedules((prev) => prev.map((row, index) => (index === editingIndex ? next : row)));
+    setEditingIndex(null);
+    setEditingSchedule(null);
+    setMessage({ type: "success", text: "Schedule updated locally. Click Save Settings to persist." });
+  };
+
+  const handleDeleteSchedule = (index) => {
+    const confirmed = window.confirm("Delete this schedule?");
+    if (!confirmed) return;
+
+    setSchedules((prev) => prev.filter((_, i) => i !== index));
+    if (editingIndex === index) {
+      setEditingIndex(null);
+      setEditingSchedule(null);
+    } else if (editingIndex !== null && editingIndex > index) {
+      setEditingIndex((prev) => prev - 1);
+    }
+    setMessage({ type: "success", text: "Schedule deleted locally. Click Save Settings to persist." });
+  };
+
+  const handleSave = async () => {
+    if (!isDirty) return;
+
+    const updated = {
+      ...userConfig,
+      schedule: {
+        ...userConfig.schedule,
+        items: schedules,
+      },
+    };
+
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/api/flows/save-config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("botflows_token")}`,
+          "x-api-key": `${config.apiKey}`,
+        },
+        body: JSON.stringify({ Config: updated }),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        localStorage.setItem("botflows_config", JSON.stringify(updated));
+        setBaselineSchedulesHash(JSON.stringify(schedules));
+        setMessage({ type: "success", text: "Configuration settings saved." });
+        console.log(result.message);
+      } else {
+        setMessage({ type: "error", text: result.message || "Failed to save configuration." });
+      }
+    } catch (err) {
+      console.error("Failed to save userConfig:", err);
+      setMessage({ type: "error", text: "Failed to save configuration. Please try again." });
+    }
+  };
+
+  const handleToggleFlowExecution = async (flow) => {
+    if (!isAdmin || !flow?.id) return;
+    const nextValue = !(flow.isExecutionEnabled !== false);
+    setUpdatingFlowId(flow.id);
+    setMessage(null);
+    try {
+      const response = await fetch(
+        `${config.apiBaseUrl}/api/flows/${encodeURIComponent(flow.id)}/execution-enabled`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/json",
+            "x-api-key": config.apiKey,
+          },
+          body: JSON.stringify({ isExecutionEnabled: nextValue }),
+        }
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.message || result?.error || `HTTP ${response.status}`);
+      }
+      setFlows((prev) =>
+        prev.map((f) => (f.id === flow.id ? { ...f, isExecutionEnabled: nextValue } : f))
+      );
+      setAdminFlows((prev) =>
+        prev.map((f) => (f.id === flow.id ? { ...f, isExecutionEnabled: nextValue } : f))
+      );
+      setMessage({
+        type: "success",
+        text: `Execution ${nextValue ? "enabled" : "disabled"} for "${flow.name || flow.id}".`,
+      });
+    } catch (err) {
+      setMessage({ type: "error", text: `Failed to update execution flag: ${err.message}` });
+    } finally {
+      setUpdatingFlowId("");
+    }
+  };
+
+  const renderScheduleEditor = (value, onChange) => {
+    const typeValue = value.type?.value || "";
+
+    return (
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5 items-start">
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Run Background</label>
+          <div className="h-11 flex items-center">
+            <input
+              type="checkbox"
+              checked={Boolean(value.silent)}
+              onChange={(e) => onChange({ ...value, silent: e.target.checked })}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Select Flow</label>
+          <FlowSelector
+            value={value.flow?.value || ""}
+            onChange={(val) => onChange({ ...value, flow: { value: val, enabled: true } })}
+            showLabel={false}
+            fetchedFlows={flows}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Schedule Type</label>
+          <select
+            className="border p-2 w-full rounded h-11"
+            value={typeValue}
+            onChange={(e) => {
+              const type = e.target.value;
+              onChange({
+                ...value,
+                type: { value: type, enabled: true },
+                dayOfWeek: {
+                  value: type === "weekly" ? value.dayOfWeek?.value || [] : [],
+                  enabled: type === "weekly",
+                },
+                cron: {
+                  value: type === "cron" ? value.cron?.value || "" : "",
+                  enabled: type === "cron",
+                },
+                time: {
+                  value: type === "cron" ? "" : value.time?.value || "09:00",
+                  enabled: type !== "cron",
+                },
+              });
+            }}
+          >
+            <option value="">Select schedule type</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="cron">CRON</option>
+          </select>
+        </div>
+
+        {typeValue === "weekly" && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Days of Week</label>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 border rounded p-2 min-h-[44px]">
+              {DAYS_OF_WEEK.map((day) => {
+                const selectedDays = value.dayOfWeek?.value || [];
+                const isChecked = selectedDays.includes(day);
+                return (
+                  <label key={day} className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        const updated = e.target.checked
+                          ? [...selectedDays, day]
+                          : selectedDays.filter((d) => d !== day);
+                        onChange({
+                          ...value,
+                          dayOfWeek: { value: updated, enabled: true },
+                        });
+                      }}
+                    />
+                    <span>{day}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {typeValue === "cron" && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">CRON</label>
+            <input
+              type="text"
+              className="border p-2 w-full rounded h-11"
+              placeholder="e.g. 0 9 * * *"
+              value={value.cron?.value || ""}
+              onChange={(e) => onChange({ ...value, cron: { value: e.target.value, enabled: true } })}
+            />
+          </div>
+        )}
+
+        {typeValue !== "cron" && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Time (HH:mm)</label>
+            <input
+              type="time"
+              className="border p-2 w-full rounded h-11"
+              value={value.time?.value || ""}
+              onChange={(e) => onChange({ ...value, time: { value: e.target.value, enabled: true } })}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <main className="p-6 overflow-auto h-full text-gray-700 bg-gray-50 space-y-6">
-      <h1 className="text-2xl font-semibold mb-4">Configuration Settings</h1>
-        <div className="flex flex-col space-y-6">
-        {/* Agent Settings */}
-        <SectionCard title="Agent Settings" sectionKey="agent" >
-            <div className="flex flex-wrap gap-6">
-            {/* Field 1 */}
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Launch on Startup</label>
-                    <input
-                    type="checkbox"
-                    checked={userConfig.agent.launchOnStartup}
-                    onChange={(e) =>
-                        updateSetting("agent.launchOnStartup", e.target.checked)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Browser Path</label>
-                    <input
-                    type="text"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.agent.browserPath}
-                    onChange={(e) =>
-                        updateSetting("agent.browserPath", e.target.value)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Headless Mode</label>
-                    <input
-                    type="checkbox"
-                    checked={userConfig.agent.headless}
-                    onChange={(e) =>
-                        updateSetting("agent.headless", e.target.checked)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Proxy</label>
-                    <input
-                    type="text"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.agent.proxy}
-                    onChange={(e) => updateSetting("agent.proxy", e.target.value)}
-                    />
-                </div>
-            </div>
-        </SectionCard>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Schedule Settings</h1>
+        <div className="flex items-center gap-3">
+          <span className={`text-sm ${isDirty ? "text-amber-700" : "text-gray-500"}`}>
+            {isDirty ? "Unsaved changes" : "All changes saved"}
+          </span>
+          <button
+            onClick={handleSave}
+            disabled={!isDirty}
+            className="px-4 py-2 bg-indigo-600 text-white rounded enabled:hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            Save Settings
+          </button>
+        </div>
+      </div>
 
-        {/* Replay Settings */}
-        <SectionCard title="Replay Settings" sectionKey="replay">
-            <div className="flex flex-wrap gap-6">
-            {/* Field 1 */}
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Retry Count</label>
-                    <input
-                    type="number"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.replay.retryCount}
-                    onChange={(e) =>
-                        updateSetting("replay.retryCount", Number(e.target.value))
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Step Delay (ms)</label>
-                    <input
-                    type="number"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.replay.stepDelay}
-                    onChange={(e) =>
-                        updateSetting("replay.stepDelay", Number(e.target.value))
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Step Timeout (ms)</label>
-                    <input
-                    type="number"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.replay.stepTimeout}
-                    onChange={(e) =>
-                        updateSetting("replay.stepTimeout", Number(e.target.value))
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Max Steps</label>
-                    <input
-                    type="number"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.replay.maxSteps}
-                    onChange={(e) =>
-                        updateSetting("replay.maxSteps", Number(e.target.value))
-                    }
-                    />
-            </div>
+      {message && (
+        <div
+          className={`rounded border px-4 py-3 text-sm ${
+            message.type === "error"
+              ? "border-red-300 bg-red-50 text-red-700"
+              : "border-green-300 bg-green-50 text-green-700"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <section className="bg-white rounded-lg shadow p-5 space-y-4">
+        {renderScheduleEditor(newSchedule, setNewSchedule)}
+
+        <div>
+          <button className="text-sm text-indigo-600 underline" onClick={handleAddSchedule}>
+            + Add Schedule
+          </button>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-lg shadow p-5 space-y-3">
+        <h2 className="text-md font-semibold text-purple-700">Configured Schedules</h2>
+
+        {schedules.length === 0 && <p className="text-sm text-gray-500">No schedules configured yet.</p>}
+
+        {schedules.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-600 border-b">
+                  <th className="py-2 pr-4">Background</th>
+                  <th className="py-2 pr-4">Flow</th>
+                  <th className="py-2 pr-4">Type</th>
+                  <th className="py-2 pr-4">Days</th>
+                  <th className="py-2 pr-4">Time</th>
+                  <th className="py-2 pr-4">CRON</th>
+                  <th className="py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedules.map((sched, index) => (
+                  <Fragment key={`group-${index}`}>
+                    <tr key={`row-${index}`} className="border-b last:border-b-0">
+                      <td className="py-2 pr-4">{sched.silent ? "Yes" : "No"}</td>
+                      <td className="py-2 pr-4">{getFlowDisplayName(sched.flow)}</td>
+                      <td className="py-2 pr-4">{sched.type?.value || "--"}</td>
+                      <td className="py-2 pr-4">
+                        {Array.isArray(sched.dayOfWeek?.value) && sched.dayOfWeek.value.length > 0
+                          ? sched.dayOfWeek.value.join(", ")
+                          : "--"}
+                      </td>
+                      <td className="py-2 pr-4">{sched.time?.value || "--"}</td>
+                      <td className="py-2 pr-4">{sched.cron?.value || "--"}</td>
+                      <td className="py-2">
+                        <div className="flex items-center gap-3">
+                          <button className="text-indigo-600 hover:underline" onClick={() => handleStartEdit(index)}>
+                            Edit
+                          </button>
+                          <button
+                            className="text-red-600 hover:underline"
+                            onClick={() => handleDeleteSchedule(index)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {editingIndex === index && editingSchedule && (
+                      <tr key={`edit-${index}`} className="bg-gray-50 border-b">
+                        <td className="py-3" colSpan={7}>
+                          <div className="px-2 space-y-3">
+                            {renderScheduleEditor(editingSchedule, setEditingSchedule)}
+                            <div className="flex justify-end gap-3">
+                              <button className="text-sm text-gray-600 hover:underline" onClick={handleCancelEdit}>
+                                Cancel
+                              </button>
+                              <button
+                                className="px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 text-sm"
+                                onClick={handleSaveEdit}
+                              >
+                                Save Row
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </SectionCard>
+        )}
+      </section>
 
-        {/* Advanced Settings */}
-        <SectionCard title="Advanced Settings" sectionKey="advanced">
-            <div className="flex flex-wrap gap-6">
-            {/* Field 1 */}
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Auto Save Flows</label>
-                    <input
-                    type="checkbox"
-                    checked={userConfig.advanced.autoSaveFlows}
-                    onChange={(e) =>
-                        updateSetting("advanced.autoSaveFlows", e.target.checked)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Clear Cache on Exit</label>
-                    <input
-                    type="checkbox"
-                    checked={userConfig.advanced.clearCacheOnExit}
-                    onChange={(e) =>
-                        updateSetting("advanced.clearCacheOnExit", e.target.checked)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Log Level</label>
-                    <select
-                    className="border p-2 w-full rounded"
-                    value={userConfig.advanced.logLevel}
-                    onChange={(e) =>
-                        updateSetting("advanced.logLevel", e.target.value)
-                    }
-                    >
-                    <option value="debug">debug</option>
-                    <option value="info">info</option>
-                    <option value="warn">warn</option>
-                    <option value="error">error</option>
-                    </select>
-              </div>
-            </div>
-        </SectionCard>
-
-        {/* Integrations */}
-        <SectionCard title="Integrations" sectionKey="integrations">
-            <div className="flex flex-wrap gap-6">
-            {/* Field 1 */}
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Webhook URL</label>
-                    <input
-                    type="text"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.integrations.webhookUrl}
-                    onChange={(e) =>
-                        updateSetting("integrations.webhookUrl", e.target.value)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">API Key</label>
-                    <input
-                    type="text"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.integrations.apiKey}
-                    onChange={(e) =>
-                        updateSetting("integrations.apiKey", e.target.value)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Storage Type</label>
-                    <input
-                    type="text"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.integrations.storage.type}
-                    onChange={(e) =>
-                        updateSetting("integrations.storage.type", e.target.value)
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Connection String</label>
-                    <input
-                    type="text"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.integrations.storage.connectionString}
-                    onChange={(e) =>
-                        updateSetting(
-                        "integrations.storage.connectionString",
-                        e.target.value
-                        )
-                    }
-                    />
-                </div>
-                <div className="flex flex-col min-w-[200px] flex-1 items-center">
-                    <label className="block font-medium text-gray-700">Container Name</label>
-                    <input
-                    type="text"
-                    className="border p-2 w-full rounded"
-                    value={userConfig.integrations.storage.containerName}
-                    onChange={(e) =>
-                        updateSetting(
-                        "integrations.storage.containerName",
-                        e.target.value
-                        )
-                    }
-                    />
-              </div>
-            </div>
-        </SectionCard>
-
-        {/* Schedule Settings */}
-        <SectionCard title="Schedule Settings" sectionKey="schedule">
-        {/* Header row */}
-
-        <div className="flex flex-wrap gap-6 justify-start mb-2 px-1">
-            <div className="min-w-[200px] text-center font-medium text-gray-700">Run Backgound</div>
-            <div className="min-w-[200px] text-center font-medium text-gray-700">Select Flow</div>
-            <div className="min-w-[200px] text-center font-medium text-gray-700">Schedule Type</div>
-
-            {(scheduleType === "weekly") && (
-            <div className="min-w-[200px] text-center font-medium text-gray-700">Days of Week</div>
-            )}
-
-            {scheduleType === "cron" && (
-            <div className="min-w-[200px] text-center font-medium text-gray-700">CRON</div>
-            )}
-            {scheduleType != "cron" && (
-                <div className="min-w-[200px] text-center font-medium text-gray-700">Time (HH:mm)</div>
-            )}
-        </div>
-
-        {/* Input row for new schedule */}
-        <div className="flex flex-wrap gap-6 justify-start mb-4">
-            <div className="flex flex-col items-center min-w-[200px]">
-                <input
-                    type="checkbox"
-                    checked={newSchedule.silent ?? true}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, silent: e.target.checked }) }
-                />
-            </div>
-            <div className="flex flex-col items-center min-w-[200px]">
-            {/* <FlowSelector
-                value={newSchedule.flow}
-                onChange={(flow) => setNewSchedule({ ...newSchedule, flow })}
-            />*/}
-            <FlowSelector 
-            value={newSchedule.flow?.value}
-            onChange={(val) => {
-                // setSelectedFlow(val);
-                setNewSchedule({ 
-                    ...newSchedule, 
-                    flow: { value: val, enabled: true } 
-                    });
-            }}
-            showLabel = {false}
-            flows={flowNameMap}
+      {isAdmin && (
+        <section className="bg-white rounded-lg shadow p-5 space-y-3">
+          <h2 className="text-md font-semibold text-purple-700">Flow Execution Gate (Admin)</h2>
+          <div className="grid gap-3 md:grid-cols-4">
+            <input
+              type="text"
+              value={adminSearch}
+              onChange={(e) => setAdminSearch(e.target.value)}
+              placeholder="Search flow, owner email, path"
+              className="border p-2 rounded h-10 md:col-span-2"
             />
-            </div>
-            <div className="flex flex-col items-center min-w-[200px]">
             <select
-                className="border p-2 w-full rounded"
-                value={newSchedule.type.value}
-                onChange={(e) => setNewSchedule({ ...newSchedule, 
-                type: { value: e.target.value , enabled: true } 
-                })}
+              value={adminStatusFilter}
+              onChange={(e) => setAdminStatusFilter(e.target.value)}
+              className="border p-2 rounded h-10"
             >
-                <option value="">Select schedule type</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="cron">CRON</option>
+              <option value="all">All statuses</option>
+              <option value="enabled">Enabled only</option>
+              <option value="disabled">Disabled only</option>
             </select>
+            <select
+              value={adminOwnerFilter}
+              onChange={(e) => setAdminOwnerFilter(e.target.value)}
+              className="border p-2 rounded h-10"
+            >
+              <option value="all">All owners</option>
+              {adminOwners.map((owner) => (
+                <option key={owner} value={owner}>
+                  {owner}
+                </option>
+              ))}
+            </select>
+          </div>
+          {adminFlows.length === 0 && <p className="text-sm text-gray-500">No flows found.</p>}
+          {adminFlows.length > 0 && filteredAdminFlows.length === 0 && (
+            <p className="text-sm text-gray-500">No flows match the current filter.</p>
+          )}
+          {filteredAdminFlows.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2 pr-4">Flow</th>
+                    <th className="py-2 pr-4">Owner (Email)</th>
+                    <th className="py-2 pr-4">Path</th>
+                    <th className="py-2 pr-4">Execution Enabled</th>
+                    <th className="py-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAdminFlows.map((flow) => (
+                    <tr key={flow.id || flow.path} className="border-b last:border-b-0">
+                      <td className="py-2 pr-4">{flow.name || "-"}</td>
+                      <td className="py-2 pr-4">{flow.ownerEmail || "-"}</td>
+                      <td className="py-2 pr-4 text-xs text-gray-600">{flow.path || "-"}</td>
+                      <td className="py-2 pr-4">
+                        <span className={flow.isExecutionEnabled !== false ? "text-emerald-700" : "text-red-700"}>
+                          {flow.isExecutionEnabled !== false ? "On" : "Off"}
+                        </span>
+                      </td>
+                      <td className="py-2">
+                        <button
+                          type="button"
+                          disabled={updatingFlowId === flow.id}
+                          onClick={() => handleToggleFlowExecution(flow)}
+                          className="px-3 py-1.5 rounded border bg-white hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {updatingFlowId === flow.id
+                            ? "Updating..."
+                            : flow.isExecutionEnabled !== false
+                              ? "Turn Off"
+                              : "Turn On"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
-            {/* Conditional: Weekly → Show Day of Week */}
-            {newSchedule.type?.value === "weekly" && (
-            <div className="flex flex-col items-start min-w-[200px]">
-                <label className="block font-medium text-gray-700 text-sm mb-1">Days of Week</label>
-                <div className="grid grid-cols-2 gap-2">
-                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => {
-                    const selectedDays = newSchedule.dayOfWeek?.value || [];
-                    const isChecked = selectedDays.includes(day);
-
-                    return (
-                    <label key={day} className="inline-flex items-center space-x-2">
-                        <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                            const updated = e.target.checked
-                            ? [...selectedDays, day]
-                            : selectedDays.filter((d) => d !== day);
-                            setNewSchedule({
-                            ...newSchedule,
-                            dayOfWeek: { value: updated, enabled: true },
-                            });
-                        }}
-                        />
-                        <span>{day}</span>
-                    </label>
-                    );
-                })}
-                </div>
-            </div>
-            )}
-
-            {/* Conditional: CRON → Show CRON input */}
-            {newSchedule.type?.value === "cron" && (
-            <div className="flex flex-col items-center min-w-[200px]">
-                {/* <label className="block font-medium text-gray-700">CRON Expression</label> */}
-                <input
-                type="text"
-                className="border p-2 w-full rounded"
-                placeholder="e.g. 0 9 * * *"
-                value={newSchedule.cron?.value}
-                onChange={(e) =>
-                    setNewSchedule({
-                    ...newSchedule,
-                    time: {value:"", enabled: false},
-                    cron: { value: e.target.value, enabled: true },
-                    })
-                }
-                />
-            </div>
-            )}
-
-            {scheduleType != "cron" && (
-                <div className="flex flex-col items-center min-w-[200px]">
-                <input
-                    type="time"
-                    className="border p-2 w-full rounded"
-                    value={newSchedule.time?.value}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, time: { value: e.target.value , enabled: true } })}
-                />
-                </div>
-            )}
-
-        </div>
-
-        <button
-        className="text-sm text-indigo-600 underline"
-        onClick={() => {
-            if (
-            !newSchedule.flow ||
-            ["", "--"].includes(newSchedule.flow) ||
-            !newSchedule.type ||
-            newSchedule.type === "" ||
-            (newSchedule.type.value === "daily" && (!newSchedule.time || ["", "--", "--:-- --"].includes(newSchedule.time))) ||
-            (newSchedule.type.value === "weekly" && (!newSchedule.dayOfWeek || newSchedule.dayOfWeek.value.length == 0))
-            ) {
-            alert("Please complete all required fields before adding a new schedule.");
-            return;
-            }
-            if(schedules.find(item => item.flow?.value == newSchedule.flow.value))
-            {
-                alert("Schedule already defined for this flow! delete existing schdule to configure new one.");
-                return;
-            }
-            setSchedules([...schedules, newSchedule]);
-            setNewSchedule({ flow: "-- Choose saved flow --", type: "", time: "", timezone });
-        }}
-        >
-        + Add Schedule
-        </button>
-
-            {schedules.length > 0 && (
-            <div className="flex flex-wrap gap-6 justify-start mb-2 px-1">
-            {allFields.map((field) => (
-                <div key={field} className="min-w-[200px] text-center font-medium text-gray-700">
-                {field === "dayOfWeek" ? "Days of Week" :
-                field.charAt(0).toUpperCase() + field.slice(1)}
-                </div>
-            ))}
-            </div>
-            )}
-
-            {schedules.map((sched, index) =>  (
-            <div key={index} className="flex flex-wrap gap-6 justify-start mb-2">
-                {allFields.map((field) => {
-                const val = sched[field];
-                const display =
-                field === "flow" ? getFlowDisplayName(val)
-                : typeof val === "boolean" ? 
-                    val.toString() 
-                    : val?.enabled ? 
-                        Array.isArray(val.value) ? 
-                            val.value.join(", ") 
-                            : val.value
-                        : "--";
-                return (
-                    <div key={field} className="min-w-[200px] text-center">
-                    {display}
-                    </div>
-                );
-                })}
-                <button
-                className="text-red-600 hover:underline text-sm ml-2"
-                onClick={() => setSchedules((prev) => prev.filter((_, i) => i !== index))}
-                >
-                Delete
-                </button>
-            </div>
-            ))}
-        </SectionCard>
-      </div>
-
-      <div className="text-right">
-        <button
-          onClick={handleSave}
-          className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-        >
-          Save Settings
-        </button>
-      </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }

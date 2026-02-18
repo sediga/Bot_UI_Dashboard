@@ -3,6 +3,8 @@ import config from "../config";
 import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
+import { getFlowExecutionStatus, listFlows, loadFlow, syncFlowIdMetadata } from "../utils/flowApi";
+import { validateFlowSteps } from "../utils/flowSchema";
 
 export default function ReplayPanel({
   onEnsureWebSocket,
@@ -49,15 +51,7 @@ export default function ReplayPanel({
       try {
         await onEnsureWebSocket("event", isMounted);
         await onEnsureWebSocket("log", isMounted);
-        const headers = {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "x-api-key": `${config.apiKey}`, // Load from env later
-        };
-        const res = await fetch(`${config.apiBaseUrl}/api/flows/list`, {
-          headers: headers,
-        });
-        const data = await res.json();
+        const data = await listFlows();
         setSavedFlows(data);
       } catch (err) {
         console.error("Error fetching saved flows", err);
@@ -66,32 +60,53 @@ export default function ReplayPanel({
     };
 
     fetchSavedFlows();
-  }, []);
-
-  const headersWithAuth = () => ({
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-    "x-api-key": `${config.apiKey}`,
-  });
+  }, [token]);
 
   const handleReplay = async () => {
     if (!selectedFlow) return;
     setLogs([]);
 
     try {
-      const loadRes = await fetch(
-        `${config.apiBaseUrl}/api/flows/load?path=${encodeURIComponent(selectedFlow)}`,
-        { headers: headersWithAuth() }
-      );
-      const flowData = await loadRes.json();
+      try {
+        const status = await getFlowExecutionStatus(selectedFlow);
+        if (status?.isExecutionEnabled === false) {
+          setLog("Replay blocked: flow execution is disabled by admin policy.");
+          return;
+        }
+      } catch (statusErr) {
+        console.warn("Execution status precheck unavailable. Continuing replay.", statusErr);
+      }
 
+      const flowData = await loadFlow(selectedFlow);
+      const validated = validateFlowSteps(flowData);
+      if (validated.hasErrors) {
+        setLog("Replay blocked: flow has validation errors. Open Create tab and fix highlighted steps.");
+        return;
+      }
+
+      const selectedFlowMeta = savedFlows.find((f) => f.path === selectedFlow) || {};
       const res = await fetch(`${config.agentServerUrl}/api/replay`, {
         method: "POST",
-        headers: headersWithAuth(),
-        body: JSON.stringify(flowData),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: localStorage.getItem("botflows_token")?.startsWith("Bearer ")
+            ? localStorage.getItem("botflows_token")
+            : `Bearer ${localStorage.getItem("botflows_token") || ""}`,
+          "x-api-key": `${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          steps: validated.steps,
+          flowPath: selectedFlow,
+          flowId: selectedFlowMeta.id || undefined,
+          triggerType: "manual",
+        }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data?.detail || data?.error || `HTTP ${res.status}`;
+        throw new Error(detail);
+      }
       setLog("Replay started:\n" + JSON.stringify(data, null, 2));
     } catch (err) {
       console.error("Replay failed:", err);
@@ -103,22 +118,27 @@ export default function ReplayPanel({
     if (!selectedFlow || isDownloading) return;
     setIsDownloading(true);
     try {
-      const loadRes = await fetch(
-        `${config.apiBaseUrl}/api/flows/load?path=${encodeURIComponent(selectedFlow)}`,
-        { headers: headersWithAuth() }
-      );
-
-      if (!loadRes.ok) {
-        throw new Error(`Failed to load flow: HTTP ${loadRes.status}`);
+      const flowJson = await loadFlow(selectedFlow);
+      const selectedFlowMeta = savedFlows.find((f) => f.path === selectedFlow) || {};
+      const flowId = String(selectedFlowMeta.id || "");
+      if (selectedFlow && flowId) {
+        try {
+          await syncFlowIdMetadata(selectedFlow, flowId);
+        } catch (err) {
+          console.warn("Flow ID metadata sync failed. Continuing download.", err);
+        }
       }
-
-      const flowJson = await loadRes.json();
+      const flowDoc = {
+        flowId,
+        flowPath: selectedFlow || undefined,
+        steps: flowJson,
+      };
 
       // Derive a safe filename: last segment of path, ensure .json
       const base = (selectedFlow.split("/").pop() || "flow").replace(/[^\w.-]/g, "_");
       const filename = base.toLowerCase().endsWith(".json") ? base : `${base}.json`;
 
-      const blob = new Blob([JSON.stringify(flowJson, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(flowDoc, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -189,7 +209,13 @@ export default function ReplayPanel({
 
       {/* Flow Selector */}
       <section className="bg-white shadow rounded-lg p-5 space-y-4">
-        <FlowSelector value={selectedFlow} onChange={setSelectedFlow} label="Select Flow" />
+        <FlowSelector
+          value={selectedFlow}
+          onChange={setSelectedFlow}
+          label="Select Flow"
+          fetchedFlows={savedFlows}
+        />
+        
 
         <div className="flex justify-end gap-2">
           <button
@@ -213,7 +239,7 @@ export default function ReplayPanel({
 
       {/* Status Panel */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <StatusPanel status={agentStatus} logs={logs} />
+        <StatusPanel status={agentStatus} logs={logs} onClear={() => setLogs([])} />
       </div>
     </div>
   );

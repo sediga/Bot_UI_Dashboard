@@ -19,6 +19,7 @@ export default function ImportDataStep({ token, onCancel, onSave, onTest, mode="
 
   // NEW: the real path used at runtime by the agent/player
   const [agentPath, setAgentPath] = useState("");
+  const [pathTouched, setPathTouched] = useState(false);
 
   useEffect(() => {
     if (!initial) return;
@@ -44,6 +45,31 @@ export default function ImportDataStep({ token, onCancel, onSave, onTest, mode="
     return dir.replace(/[\\/]+$/, "") + sep + name;
   }
 
+  function guessDefaultDir() {
+    if (navigator.platform?.startsWith("Win")) return "C:\\Flowtra\\Data";
+    return "/Users/<you>/Flowtra/data";
+  }
+
+  function looksLikeFilePath(v = "") {
+    return /\.(xlsx|csv)$/i.test(String(v).trim());
+  }
+
+  function resolveRuntimePath(rawPath, fileName) {
+    const pathVal = String(rawPath || "").trim();
+    const nameVal = String(fileName || "").trim();
+    if (!pathVal) return "";
+    if (looksLikeFilePath(pathVal)) return pathVal;
+    if (!nameVal) return "";
+    return joinLike(pathVal, nameVal);
+  }
+
+  function replaceFileNameInPath(pathVal, fileName) {
+    const p = String(pathVal || "").trim();
+    if (!p) return fileName;
+    if (!looksLikeFilePath(p)) return joinLike(p, fileName);
+    return p.replace(/[/\\][^/\\]+$/, (m) => (m.includes("\\") ? `\\${fileName}` : `/${fileName}`));
+  }
+
   async function onFileChange(e) {
     const f = e.target.files?.[0] || null;
     setOriginalName(f ? f.name : "");
@@ -54,6 +80,16 @@ export default function ImportDataStep({ token, onCancel, onSave, onTest, mode="
     setSheet("");
 
     if (!f) return;
+
+    // UX: auto-update runtime path on file pick unless user manually edited path.
+    if (!pathTouched) {
+      const current = String(agentPath || "").trim();
+      if (!current) {
+        setAgentPath(joinLike(guessDefaultDir(), f.name));
+      } else {
+        setAgentPath(replaceFileNameInPath(current, f.name));
+      }
+    }
 
     const isXlsx = /\.xlsx$/i.test(f.name);
     const isCsv = /\.csv$/i.test(f.name);
@@ -143,15 +179,11 @@ export default function ImportDataStep({ token, onCancel, onSave, onTest, mode="
   }
 
   async function handleSave() {
-    // ✅ Save only the *agentPath* so the player always opens the latest file on disk.
-    if (!agentPath) {
+    const finalPath = resolveRuntimePath(agentPath, originalName || (file?.name || "data.xlsx"));
+    if (!finalPath) {
       alert("Enter the file path on the agent that should be used at runtime.");
       return;
     }
-    const finalPath =
-      agentPath?.trim()
-        ? joinLike(agentPath.trim(), originalName || (file?.name || "data.xlsx"))
-        : agentPath;
 
     // pick a format if not set (e.g., user skipped upload/preview)
     const effectiveFormat = format || guessFormat(finalPath) || "xlsx";
@@ -205,13 +237,26 @@ export default function ImportDataStep({ token, onCancel, onSave, onTest, mode="
           </label>
           <input
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            placeholder="C:\\Data\\DailyExports\\patients.xlsx"
+            placeholder="C:\\Data\\DailyExports\\patients.xlsx  or  C:\\Data\\DailyExports"
             value={agentPath}
-            onChange={(e) => setAgentPath(e.target.value)}
+            onChange={(e) => {
+              setAgentPath(e.target.value);
+              setPathTouched(true);
+            }}
           />
           <p className="mt-1 text-[11px] text-gray-500">
-            This path is saved in the step. The player will open this file each run so it always uses the latest contents.
+            You can enter a full file path or just a folder. If folder is provided, the selected/uploaded file name is appended.
           </p>
+          {!!resolveRuntimePath(agentPath, originalName || (file?.name || "")) && (
+            <p className="mt-1 text-[11px] text-gray-500">
+              Resolved runtime path: <code>{resolveRuntimePath(agentPath, originalName || (file?.name || ""))}</code>
+            </p>
+          )}
+          {originalName && !looksLikeFilePath(agentPath) && (
+            <p className="mt-1 text-[11px] text-blue-600">
+              Selected filename: <code>{originalName}</code>
+            </p>
+          )}
         </div>
 
         {/* Optional: upload purely for preview/template */}
@@ -290,7 +335,7 @@ export default function ImportDataStep({ token, onCancel, onSave, onTest, mode="
         <button onClick={onCancel} className="text-sm text-gray-600">← Back</button>
         <button
           onClick={handleSave}
-          disabled={!agentPath || saving}
+          disabled={!resolveRuntimePath(agentPath, originalName || (file?.name || "")) || saving}
           className="text-sm px-4 py-2 rounded-md bg-blue-600 text-white disabled:opacity-60"
         >
           Save Import Step

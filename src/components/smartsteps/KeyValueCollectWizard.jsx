@@ -21,6 +21,7 @@ export default function KeyValueCollectWizard({
       initial?.selectors?.item ||
       ""
   );
+  const [editStructure, setEditStructure] = useState(mode !== "edit");
 
   const [fields, setFields] = useState(
     initial?.fields?.length
@@ -73,12 +74,11 @@ export default function KeyValueCollectWizard({
             f.key?.trim() &&
             f.valueSelector?.trim()
         )
-        .map((f, index) => ({
+        .map((f) => ({
           key: f.key.trim(),
           label: (f.label || f.key).trim(),
           valueSelector: f.valueSelector.trim(),
           type: f.type || "text",
-          index,
         })),
     [fields]
   );
@@ -230,37 +230,55 @@ export default function KeyValueCollectWizard({
         </p>
         </div>
 
+        {(mode !== "edit" || editStructure) && (
+          <div>
+            <label className="block font-medium mb-1">
+              Container selector
+            </label>
+            <input
+              className="w-full border rounded px-2 py-1 font-mono text-xs"
+              placeholder='e.g. "section.details-wrapper"'
+              value={containerSelector}
+              onChange={(e) => setContainerSelector(e.target.value)}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Selector that wraps all key–value blocks (e.g., a details sidebar or a
+              main content region).
+            </p>
+          </div>
+        )}
+      </div>
+
+      {(mode !== "edit" || editStructure) && (
         <div>
           <label className="block font-medium mb-1">
-            Container selector
+            Item selector (per card/panel)
           </label>
           <input
             className="w-full border rounded px-2 py-1 font-mono text-xs"
-            placeholder='e.g. "section.details-wrapper"'
-            value={containerSelector}
-            onChange={(e) => setContainerSelector(e.target.value)}
+            placeholder='e.g. ".detail-card" or "div[role=listitem]"'
+            value={itemSelector}
+            onChange={(e) => setItemSelector(e.target.value)}
           />
           <p className="text-xs text-gray-500 mt-1">
-            Selector that wraps all key–value blocks (e.g., a details sidebar or a
-            main content region).
+            Each matching element is treated as one row in the collected output.
           </p>
         </div>
-      </div>
+      )}
 
-      <div>
-        <label className="block font-medium mb-1">
-          Item selector (per card/panel)
-        </label>
-        <input
-          className="w-full border rounded px-2 py-1 font-mono text-xs"
-          placeholder='e.g. ".detail-card" or "div[role=listitem]"'
-          value={itemSelector}
-          onChange={(e) => setItemSelector(e.target.value)}
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Each matching element is treated as one row in the collected output.
-        </p>
-      </div>
+      {mode === "edit" && (
+        <div className="rounded border bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          <div><strong>Container:</strong> <code>{containerSelector || "(not set)"}</code></div>
+          <div><strong>Item:</strong> <code>{itemSelector || "(not set)"}</code></div>
+          <button
+            type="button"
+            className="mt-2 text-xs text-blue-700 underline"
+            onClick={() => setEditStructure((v) => !v)}
+          >
+            {editStructure ? "Hide structure fields" : "Edit structure fields"}
+          </button>
+        </div>
+      )}
 
       {/* Fields */}
       <div>
