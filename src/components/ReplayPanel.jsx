@@ -3,7 +3,7 @@ import config from "../config";
 import StatusPanel from "./StatusPanel";
 import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
-import { listFlows, loadFlow } from "../utils/flowApi";
+import { getFlowExecutionStatus, listFlows, loadFlow, syncFlowIdMetadata } from "../utils/flowApi";
 import { validateFlowSteps } from "../utils/flowSchema";
 
 export default function ReplayPanel({
@@ -67,6 +67,16 @@ export default function ReplayPanel({
     setLogs([]);
 
     try {
+      try {
+        const status = await getFlowExecutionStatus(selectedFlow);
+        if (status?.isExecutionEnabled === false) {
+          setLog("Replay blocked: flow execution is disabled by admin policy.");
+          return;
+        }
+      } catch (statusErr) {
+        console.warn("Execution status precheck unavailable. Continuing replay.", statusErr);
+      }
+
       const flowData = await loadFlow(selectedFlow);
       const validated = validateFlowSteps(flowData);
       if (validated.hasErrors) {
@@ -74,6 +84,7 @@ export default function ReplayPanel({
         return;
       }
 
+      const selectedFlowMeta = savedFlows.find((f) => f.path === selectedFlow) || {};
       const res = await fetch(`${config.agentServerUrl}/api/replay`, {
         method: "POST",
         headers: {
@@ -83,10 +94,19 @@ export default function ReplayPanel({
             : `Bearer ${localStorage.getItem("botflows_token") || ""}`,
           "x-api-key": `${config.apiKey}`,
         },
-        body: JSON.stringify(validated.steps),
+        body: JSON.stringify({
+          steps: validated.steps,
+          flowPath: selectedFlow,
+          flowId: selectedFlowMeta.id || undefined,
+          triggerType: "manual",
+        }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data?.detail || data?.error || `HTTP ${res.status}`;
+        throw new Error(detail);
+      }
       setLog("Replay started:\n" + JSON.stringify(data, null, 2));
     } catch (err) {
       console.error("Replay failed:", err);
@@ -99,12 +119,26 @@ export default function ReplayPanel({
     setIsDownloading(true);
     try {
       const flowJson = await loadFlow(selectedFlow);
+      const selectedFlowMeta = savedFlows.find((f) => f.path === selectedFlow) || {};
+      const flowId = String(selectedFlowMeta.id || "");
+      if (selectedFlow && flowId) {
+        try {
+          await syncFlowIdMetadata(selectedFlow, flowId);
+        } catch (err) {
+          console.warn("Flow ID metadata sync failed. Continuing download.", err);
+        }
+      }
+      const flowDoc = {
+        flowId,
+        flowPath: selectedFlow || undefined,
+        steps: flowJson,
+      };
 
       // Derive a safe filename: last segment of path, ensure .json
       const base = (selectedFlow.split("/").pop() || "flow").replace(/[^\w.-]/g, "_");
       const filename = base.toLowerCase().endsWith(".json") ? base : `${base}.json`;
 
-      const blob = new Blob([JSON.stringify(flowJson, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(flowDoc, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

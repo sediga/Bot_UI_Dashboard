@@ -5,7 +5,13 @@ import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
 import SecretMapperModal from "./smartsteps/SecretMapperModal";
 import { makeSelectorLlmHelper } from "../helpers/selectorLlmHelper";
-import { listFlows, loadFlow as loadFlowFromApi, saveFlow } from "../utils/flowApi";
+import {
+  getFlowExecutionStatus,
+  listFlows,
+  loadFlow as loadFlowFromApi,
+  saveFlow,
+  syncFlowIdMetadata,
+} from "../utils/flowApi";
 import { normalizeStep, toFlowPayload, validateFlowSteps } from "../utils/flowSchema";
 
 export default function StepBuilder({
@@ -42,6 +48,7 @@ export default function StepBuilder({
   const [secretCtx, setSecretCtx] = useState(null);      
   const [showSecretModal, setShowSecretModal] = useState(false);
   const [isFetchingFlows, setIsFetchingFlows] = useState(false);
+  const [loadedFlowMeta, setLoadedFlowMeta] = useState({ flowId: "", flowPath: "" });
 
   const token = localStorage.getItem("botflows_token");
   // const [logs, setLogs] = useState([]);
@@ -474,6 +481,7 @@ useEffect(() => {
         alert("Cannot preview: some steps are invalid. Please review highlighted steps.");
         return;
       }
+      window.dispatchEvent(new Event("flowtra:preview-start"));
       const authType = config.authType || "jwt";
       await onEnsureWebSocket("event");
       await onEnsureWebSocket("log");
@@ -499,10 +507,29 @@ useEffect(() => {
       }).catch(() => {});
 
       const payload = toFlowPayload(validated.steps);
+      const selectedFlowMeta = availableFlows.find((f) => f.path === selectedFlow) || {};
+      if (selectedFlow) {
+        try {
+          const status = await getFlowExecutionStatus(selectedFlow);
+          if (status?.isExecutionEnabled === false) {
+            const msg = "Preview blocked: flow execution is disabled by admin policy.";
+            setValidationSummary(msg);
+            alert(msg);
+            return;
+          }
+        } catch (statusErr) {
+          console.warn("Execution status precheck unavailable. Continuing preview.", statusErr);
+        }
+      }
       const res = await fetch(`${config.agentServerUrl}/api/preview-replay`, {
         method: "POST",
         headers,
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          steps: payload,
+          flowPath: selectedFlow || undefined,
+          flowId: selectedFlowMeta.id || undefined,
+          triggerType: "manual",
+        }),
       });
 
       await fetch(`${config.agentServerUrl}/api/overlay/hide`, {
@@ -511,19 +538,32 @@ useEffect(() => {
       }).catch(() => {});
       
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Preview failed: HTTP ${res.status}${text ? ` - ${text}` : ""}`);
+        const rawText = await res.text().catch(() => "");
+        let detail = rawText;
+        try {
+          const parsed = JSON.parse(rawText);
+          detail = parsed?.detail || parsed?.error || rawText;
+        } catch {
+          // keep raw text fallback
+        }
+        throw new Error(detail || `HTTP ${res.status}`);
       }
 
       const result = await res.json().catch(() => ({}));
       if (result.status !== "ok") {
-        alert("Preview failed: " + (result.details || "Agent returned a non-ok status."));
+        const msg = "Preview failed: " + (result.details || "Agent returned a non-ok status.");
+        setValidationSummary(msg);
+        alert(msg);
         return;
       }
       setValidationSummary("");
     } catch (err) {
       console.error("Preview replay error:", err);
-      alert("Preview replay failed.");
+      const msg = err?.message || "Preview replay failed.";
+      setValidationSummary(msg);
+      alert(msg);
+    } finally {
+      window.dispatchEvent(new Event("flowtra:preview-end"));
     }
   };
 
@@ -535,9 +575,14 @@ const loadFlow = async (selectedFlow) => {
     }
     try {
       const data = await loadFlowFromApi(selectedFlow);
+      const selectedFlowMeta = availableFlows.find((f) => f.path === selectedFlow) || {};
       const validated = validateFlowSteps(data);
       clearSteps();
       validated.steps.forEach((step) => addStep(step));
+      setLoadedFlowMeta({
+        flowId: String(selectedFlowMeta.id || ""),
+        flowPath: selectedFlow || "",
+      });
       if (validated.hasErrors) {
         setValidationSummary("Loaded flow has validation issues. Review highlighted steps.");
       } else {
@@ -554,12 +599,23 @@ const loadFlow = async (selectedFlow) => {
     }
   };
 
-  const applyLoadedSteps = (arr) => {
-    if (!Array.isArray(arr)) throw new Error("Invalid flow JSON: expected an array of steps[]");
-    const validated = validateFlowSteps(arr);
+  const applyLoadedSteps = (payload) => {
+    const isArray = Array.isArray(payload);
+    const isObjectWithSteps = payload && typeof payload === "object" && Array.isArray(payload.steps);
+    if (!isArray && !isObjectWithSteps) throw new Error("Invalid flow JSON: expected steps[] or { steps: [] }");
+    const sourceSteps = isArray ? payload : payload.steps;
+    const validated = validateFlowSteps(sourceSteps);
     clearSteps();
     validated.steps.forEach((s) => addStep(s));
     setValidationSummary(validated.hasErrors ? "Loaded JSON has validation issues. Review highlighted steps." : "");
+    if (isObjectWithSteps) {
+      setLoadedFlowMeta({
+        flowId: String(payload.flowId || payload.id || ""),
+        flowPath: String(payload.flowPath || ""),
+      });
+    } else {
+      setLoadedFlowMeta({ flowId: "", flowPath: "" });
+    }
 
     // set URL from first navigate step (optional)
     const firstNav = validated.steps.find((s) => s.type?.toLowerCase?.() === "navigate" && s.url);
@@ -585,7 +641,7 @@ const loadFlow = async (selectedFlow) => {
     }
   };
 
-  const handleExportJson = () => {
+  const handleExportJson = async () => {
     if (!steps.length) return;
     const validated = validateFlowSteps(steps);
     setSteps(validated.steps);
@@ -594,12 +650,29 @@ const loadFlow = async (selectedFlow) => {
     }
 
     const payload = toFlowPayload(validated.steps);
+    const selectedFlowMeta = availableFlows.find((f) => f.path === selectedFlow) || {};
+    const flowId =
+      String(selectedFlowMeta.id || loadedFlowMeta.flowId || "") ||
+      (typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : "");
+    const flowPath = selectedFlow || loadedFlowMeta.flowPath || "";
+    if (flowPath && flowId) {
+      try {
+        await syncFlowIdMetadata(flowPath, flowId);
+      } catch (err) {
+        console.warn("Flow ID metadata sync failed. Continuing export.", err);
+      }
+    }
+    const flowJson = {
+      flowId,
+      flowPath: flowPath || undefined,
+      steps: payload,
+    };
     const selectedBase = selectedFlow ? selectedFlow.split("/").pop()?.replace(/\.json$/i, "") : "";
     const fallback = saveFileName.trim() || selectedBase || "flow";
     const base = fallback.replace(/[^\w.-]/g, "_") || "flow";
     const filename = base.toLowerCase().endsWith(".json") ? base : `${base}.json`;
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(flowJson, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

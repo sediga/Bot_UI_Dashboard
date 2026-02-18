@@ -42,3 +42,28 @@ export async function saveFlow(filename, steps) {
   }
   return res.json();
 }
+
+export async function getFlowExecutionStatus(path) {
+  const res = await fetch(
+    `${config.apiBaseUrl}/api/flows/execution-status?path=${encodeURIComponent(path)}`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Failed to fetch execution status: HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function syncFlowIdMetadata(path, flowId) {
+  const res = await fetch(`${config.apiBaseUrl}/api/flows/sync-flow-id`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ path, flowId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Failed to sync flow ID metadata: HTTP ${res.status}`);
+  }
+  return res.json();
+}

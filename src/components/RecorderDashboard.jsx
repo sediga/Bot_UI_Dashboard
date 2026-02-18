@@ -26,7 +26,8 @@ export default function RecorderDashboard() {
   const [showConfirm, setShowConfirm] = useState(false);
   const isRecording = agentStatus === "recording";
   const [isStoppingPlayback, setIsStoppingPlayback] = useState(false);
-  const canStopPlayback = ["replaying", "recording", "running"].includes(agentStatus);
+  const [isPreviewInFlight, setIsPreviewInFlight] = useState(false);
+  const canStopPlayback = agentStatus === "replaying" || isPreviewInFlight;
   const [replayMessages, setReplayMessages] = useState([]);
   const [recordMessages, setRecordMessages] = useState([]);
   const activeTabRef = useRef(activeTab);
@@ -75,6 +76,7 @@ export default function RecorderDashboard() {
       }
       console.log("Playback stop response:", result);
       setAgentStatus("idle");
+      setIsPreviewInFlight(false);
     } catch (err) {
       console.error("Failed to stop replay/preview:", err);
       alert("Could not stop replay/preview.");
@@ -82,6 +84,17 @@ export default function RecorderDashboard() {
       setIsStoppingPlayback(false);
     }
   };
+
+  useEffect(() => {
+    const onPreviewStart = () => setIsPreviewInFlight(true);
+    const onPreviewEnd = () => setIsPreviewInFlight(false);
+    window.addEventListener("flowtra:preview-start", onPreviewStart);
+    window.addEventListener("flowtra:preview-end", onPreviewEnd);
+    return () => {
+      window.removeEventListener("flowtra:preview-start", onPreviewStart);
+      window.removeEventListener("flowtra:preview-end", onPreviewEnd);
+    };
+  }, []);
 
   const handleTabChange = (newTab) => {
     if (isRecording) {
