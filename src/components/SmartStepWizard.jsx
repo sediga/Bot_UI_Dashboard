@@ -12,6 +12,7 @@ import DataLoopWizard from "./smartsteps/DataLoopWizard";
 import ApiExtractWizard from "./smartsteps/ApiExtractWizard";
 import KeyValueExtractWizard from "./smartsteps/KeyValueExtractWizard";
 import KeyValueCollectWizard from "./smartsteps/KeyValueCollectWizard";
+import AuthGateStep from "./smartsteps/AuthGateStep";
 
 export default function SmartStepWizard({
   parentId,
@@ -19,6 +20,7 @@ export default function SmartStepWizard({
   onSmartStepCreated,
   onCancel,
   availableExtractSteps = [],
+  allSteps = [],
 }) {
   const [step, setStep] = useState(1);
   const [stepType, setStepType] = useState("");
@@ -290,6 +292,18 @@ export default function SmartStepWizard({
     />
   );
 
+  const renderAuthGate = () => (
+    <AuthGateStep
+      mode="create"
+      availableSteps={allSteps}
+      onCreate={(payload) => {
+        onSmartStepCreated?.(payload);
+        onCancel?.();
+      }}
+      onCancel={() => setStep(1)}
+    />
+  );
+
   return (
     <div className="space-y-4 text-sm relative z-10">
       {step === 1 && renderStep1()}
@@ -320,6 +334,7 @@ export default function SmartStepWizard({
       {step === 2 && stepType === "api-extract" && (renderApiExtract())}
       {step === 2 && stepType === "extract-keyvalue" && renderKeyValueExtract()}
       {step === 2 && stepType === "collect-keyvalue" && renderKeyValueCollect()}
+      {step === 2 && stepType === "auth-gate" && renderAuthGate()}
     </div>
   );
 }

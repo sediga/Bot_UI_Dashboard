@@ -55,6 +55,7 @@ export default function StepList({
   const STEP_TYPES = [
     "uiAction",
     "navigate",
+    "authGate",
     "gridExtract",
     "apiExtract",
     "importData",
@@ -1050,9 +1051,13 @@ const updateStep = (id, patch) =>
       }
 
       if (src.type === "importData") {
-        return (src.columns || [])
+        const baseCols = (src.columns || [])
           .map(c => (typeof c === "string" ? c : c?.name))
           .filter(Boolean);
+        const derivedCols = (src.derivedFields || [])
+          .map((r) => (typeof r?.name === "string" ? r.name.trim() : ""))
+          .filter(Boolean);
+        return Array.from(new Set([...baseCols, ...derivedCols]));
       }
       // NEW: support API Extract as a data source for dataLoop
       if (src.type === "apiExtract") {
@@ -1440,7 +1445,7 @@ const updateStep = (id, patch) =>
             </div>
           )}
 
-          {step.type === "importData" && (
+        {step.type === "importData" && (
             <div className="p-2 rounded border bg-green-50">
               <div className="font-semibold text-green-700">
                 {step.name || `Grid Extract (${step.id})`}
@@ -1451,6 +1456,15 @@ const updateStep = (id, patch) =>
               <div className="text-xs text-gray-600 mb-2">
                 <strong>Path:</strong> <code>{step.file?.path}</code>
               </div>
+              {Array.isArray(step.derivedFields) && step.derivedFields.length > 0 && (
+                <div className="text-xs text-gray-700 mb-2">
+                  <strong>Derived Fields:</strong>{" "}
+                  {step.derivedFields
+                    .map((r) => (typeof r?.name === "string" ? r.name.trim() : ""))
+                    .filter(Boolean)
+                    .join(", ")}
+                </div>
+              )}
               <ul className="text-sm list-disc pl-4 mb-2">
                 {step.columns?.map((col, index) => (
                   <li key={index}>
@@ -1460,6 +1474,33 @@ const updateStep = (id, patch) =>
               </ul>
             </div>
             
+          )}
+
+          {String(step.type || "").toLowerCase() === "authgate" && (
+            <div className="p-2 rounded border bg-amber-50">
+              <div className="font-semibold text-amber-700">
+                {step.name || "Auth Gate"}
+              </div>
+              <div className="text-xs text-gray-600 mb-2">
+                <strong>ID:</strong> <code>{step.id}</code>
+              </div>
+              <ul className="text-sm list-disc pl-4 mb-2">
+                <li>
+                  <strong>Logged-in selector:</strong>{" "}
+                  <code>{step.loggedInSelector || "(none)"}</code>
+                </li>
+                <li>
+                  <strong>Login selector:</strong>{" "}
+                  <code>{step.loginSelector || "(none)"}</code>
+                </li>
+                <li>
+                  <strong>Login step IDs:</strong>{" "}
+                  {Array.isArray(step.loginStepIds) && step.loginStepIds.length
+                    ? step.loginStepIds.join(", ")
+                    : "(none)"}
+                </li>
+              </ul>
+            </div>
           )}
 
           {step.type === "exportData" && (
@@ -1698,6 +1739,7 @@ const updateStep = (id, patch) =>
             <option value="all">All step types</option>
             <option value="uiaction">UI Action</option>
             <option value="navigate">Navigate</option>
+            <option value="authgate">Auth Gate</option>
             <option value="gridextract">Grid Extract</option>
             <option value="apiextract">API Extract</option>
             <option value="importdata">Import Data</option>
@@ -1761,6 +1803,7 @@ const updateStep = (id, patch) =>
               onCancel={handleCancelWizard}
               onClose={handleCancelWizard}
               availableExtractSteps={extractSteps}
+              allSteps={steps}
             />
           </Modal>
         )}
@@ -1820,13 +1863,14 @@ const updateStep = (id, patch) =>
           (() => {
             const s = steps.find(st => st.id === editingStepId);
             const SMART_TYPES = new Set([
-              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract","keyValueExtract","keyValueCollect"
+              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract","keyValueExtract","keyValueCollect","authGate"
             ]);
             return SMART_TYPES.has(s?.type)
               ? (
                   <SmartStepEditModal
                     step={s}
                     availableExtractSteps={steps.filter(x => ["gridExtract","apiExtract","importData","keyValueExtract","keyValueCollect"].includes(x.type))}
+                    allSteps={steps}
                     onClose={handleCloseEditor}
                     onSave={handleSaveEditor}
                   />

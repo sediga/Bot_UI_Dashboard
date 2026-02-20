@@ -10,6 +10,7 @@ import DataLoopWizard from "./DataLoopWizard";
 import ApiExtractWizard from "./ApiExtractWizard";
 import KeyValueExtractWizard from "./KeyValueExtractWizard";
 import KeyValueCollectWizard from "./KeyValueCollectWizard";
+import AuthGateStep from "./AuthGateStep";
 
 /**
  * SmartStepEditModal
@@ -26,6 +27,7 @@ import KeyValueCollectWizard from "./KeyValueCollectWizard";
 export default function SmartStepEditModal({
   step,
   availableExtractSteps = [],
+  allSteps = [],
   onClose,
   onSave,
   pickedTarget, // NEW
@@ -90,6 +92,11 @@ export default function SmartStepEditModal({
           headerRow: step.headerRow || 1,
           columns: step.columns || [],
           format: step.format || "xlsx",
+          derivedFields: Array.isArray(step.derivedFields)
+            ? step.derivedFields
+            : Array.isArray(step.normalize?.derivedFields)
+            ? step.normalize.derivedFields
+            : [],
         };
       case "navigate":
         return {
@@ -119,6 +126,18 @@ export default function SmartStepEditModal({
           itemSelector: step.itemSelector || step.selectors?.item || "",
           fields: Array.isArray(step.fields) ? step.fields : [],
           datasetId: step.datasetId || "",
+        };
+      case "authGate":
+        return {
+          id: step.id,
+          stepName: step.name || "Auth Gate",
+          loggedInSelector: step.loggedInSelector || "[data-testid='menu-div-rootmenuClaims']",
+          loginSelector: step.loginSelector || "#username",
+          loggedInUrlContains: step.loggedInUrlContains || "sc.officeally.com/",
+          loginUrlContains: step.loginUrlContains || "auth.officeally.com",
+          loginStepIds: Array.isArray(step.loginStepIds) ? step.loginStepIds : [],
+          waitMs: step.waitMs || 8000,
+          pollMs: step.pollMs || 250,
         };
       default:
         return {};
@@ -195,6 +214,7 @@ export default function SmartStepEditModal({
           headerRow: initial.headerRow,
           columns: initial.columns,
           format: initial.format,
+          derivedFields: initial.derivedFields || [],
         }}
         onSave={applyAndSave}
         onTest={handleTest}                  // NEW: forward test hook
@@ -250,6 +270,16 @@ export default function SmartStepEditModal({
       <KeyValueCollectWizard
         mode="edit"
         initial={initial}
+        onCreate={applyAndSave}
+        onCancel={onClose}
+      />
+    );
+  } else if (type === "authGate") {
+    body = (
+      <AuthGateStep
+        mode="edit"
+        initial={initial}
+        availableSteps={allSteps}
         onCreate={applyAndSave}
         onCancel={onClose}
       />

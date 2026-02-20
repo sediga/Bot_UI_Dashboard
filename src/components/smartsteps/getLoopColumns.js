@@ -14,8 +14,13 @@ export function getLoopColumns(flow, loopStep) {
 
   if (["importStep","importData","import"].includes(src.kind)) {
     const imp = byId(src.stepId);
-    const cols = imp?.columns || [];
-    return cols.map((c) => (typeof c === "string" ? c : c?.name)).filter(Boolean);
+    const baseCols = (imp?.columns || [])
+      .map((c) => (typeof c === "string" ? c : c?.name))
+      .filter(Boolean);
+    const derived = (imp?.derivedFields || [])
+      .map((r) => (typeof r?.name === "string" ? r.name.trim() : ""))
+      .filter(Boolean);
+    return Array.from(new Set([...baseCols, ...derived]));
   }
 
   return [];

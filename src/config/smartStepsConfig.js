@@ -136,6 +136,23 @@ const SMART_STEP_CONFIG = [
     emoji: "🧠",
     steps: [
       {
+        id: "auth-gate",
+        title: "Auth Gate",
+        description: "Auto-detect session and skip/run login steps.",
+        type: "authGate",
+        fields: [
+          "stepName",
+          "loggedInSelector",
+          "loginSelector",
+          "loggedInUrlContains",
+          "loginUrlContains",
+          "loginStepIds",
+          "waitMs",
+          "pollMs"
+        ],
+        disabled: false
+      },
+      {
         id: "if-block",
         title: "If Block (coming soon)",
         description: "Run steps based on a condition.",
