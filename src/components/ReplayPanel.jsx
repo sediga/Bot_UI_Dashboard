@@ -70,7 +70,7 @@ export default function ReplayPanel({
       try {
         const status = await getFlowExecutionStatus(selectedFlow);
         if (status?.isExecutionEnabled === false) {
-          setLog("Replay blocked: flow execution is disabled by admin policy.");
+          setLog(`Replay blocked: ${status?.disableReason || "flow execution is disabled by admin policy."}`);
           return;
         }
       } catch (statusErr) {

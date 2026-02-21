@@ -512,7 +512,7 @@ useEffect(() => {
         try {
           const status = await getFlowExecutionStatus(selectedFlow);
           if (status?.isExecutionEnabled === false) {
-            const msg = "Preview blocked: flow execution is disabled by admin policy.";
+            const msg = `Preview blocked: ${status?.disableReason || "flow execution is disabled by admin policy."}`;
             setValidationSummary(msg);
             alert(msg);
             return;

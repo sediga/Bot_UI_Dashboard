@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import config from "../config";
 import { useAuth } from "../contexts/AuthContext";
 import { GoogleLogin } from "@react-oauth/google";
@@ -14,7 +14,10 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, login } = useAuth();
+  const params = new URLSearchParams(location.search);
+  const nextUrl = params.get("next") || "/dashboard";
 
   const handleGoogleLoginSuccess = async (credentialResponse) => {
     try {
@@ -39,7 +42,7 @@ const Login = () => {
       const data = await res.json();
       login(data.token);
       gaEvent("login_google");
-      navigate("/dashboard");
+      navigate(nextUrl);
     } catch (err) {
       console.error("Google login failed:", err);
       setError(err.message);
@@ -48,7 +51,7 @@ const Login = () => {
 
   useEffect(() => {
     if (user) {
-      navigate("/dashboard");
+      navigate(nextUrl);
     }
   }, [user]);
 
@@ -89,7 +92,7 @@ const Login = () => {
       // Save it
       login(data.token);
       gaEvent("login_email");
-      navigate("/dashboard");
+      navigate(nextUrl);
     } catch (err) {
       setError(err.message);
     }

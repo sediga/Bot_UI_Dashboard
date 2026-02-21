@@ -19,6 +19,7 @@ import GuestStart from "./pages/GuestStart";
 import Docs from "./pages/Docs";
 import CheckEmailPage from "./pages/CheckEmailPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
+import AgentOnboardPage from "./pages/AgentOnboardPage";
 import config from "./config";
 
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID || window.__GA_MEASUREMENT_ID__ || "";
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/check-email" element={<CheckEmailPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/agent/onboard" element={<AgentOnboardPage />} />
         <Route
           path="/dashboard/*"
           element={

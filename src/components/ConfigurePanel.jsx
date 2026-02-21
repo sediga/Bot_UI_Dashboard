@@ -108,12 +108,14 @@ export default function ConfigurePanel() {
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [flows, setFlows] = useState([]);
   const [adminFlows, setAdminFlows] = useState([]);
+  const [orphanPolicies, setOrphanPolicies] = useState([]);
   const [adminSearch, setAdminSearch] = useState("");
   const [adminStatusFilter, setAdminStatusFilter] = useState("all");
   const [adminOwnerFilter, setAdminOwnerFilter] = useState("all");
   const [flowNameMap, setFlowNameMap] = useState({});
   const [message, setMessage] = useState(null);
   const [updatingFlowId, setUpdatingFlowId] = useState("");
+  const [updatingOrphanId, setUpdatingOrphanId] = useState("");
 
   const schedulesHash = useMemo(() => JSON.stringify(schedules), [schedules]);
   const isDirty = schedulesHash !== baselineSchedulesHash;
@@ -215,6 +217,7 @@ export default function ConfigurePanel() {
           setFlows([]);
           setFlowNameMap({});
           setAdminFlows([]);
+          setOrphanPolicies([]);
           return;
         }
 
@@ -244,13 +247,29 @@ export default function ConfigurePanel() {
 
           const adminData = await adminRes.json();
           setAdminFlows(Array.isArray(adminData) ? adminData : []);
+
+          const orphanRes = await fetch(`${config.apiBaseUrl}/api/flows/orphan-policies`, {
+            headers: {
+              Authorization: authHeader,
+              "Content-Type": "application/json",
+              "x-api-key": config.apiKey,
+            },
+          });
+          if (orphanRes.ok) {
+            const orphanData = await orphanRes.json();
+            setOrphanPolicies(Array.isArray(orphanData) ? orphanData : []);
+          } else {
+            setOrphanPolicies([]);
+          }
           return;
         }
 
         setAdminFlows([]);
+        setOrphanPolicies([]);
       } catch (err) {
         console.error("Failed to load flows:", err);
         setAdminFlows([]);
+        setOrphanPolicies([]);
       }
     };
 
@@ -288,6 +307,18 @@ export default function ConfigurePanel() {
     const flowPath = val?.value || "";
     if (!flowPath) return "--";
     return flowNameMap[flowPath] || flowPath;
+  };
+
+  const formatScopeKey = (scopeKey) => {
+    const raw = String(scopeKey || "").trim();
+    if (!raw) return { label: "-", raw: "-" };
+    if (!raw.startsWith("user:")) return { label: raw, raw };
+
+    const id = raw.slice("user:".length).trim();
+    if (!id) return { label: "User: (empty)", raw };
+    if (id.toLowerCase() === "unknown") return { label: "Unknown (shared fallback)", raw };
+    if (/^\d+$/.test(id)) return { label: `Dashboard User ${id}`, raw };
+    return { label: `Client ${id}`, raw };
   };
 
   const resetNewSchedule = () => {
@@ -388,6 +419,14 @@ export default function ConfigurePanel() {
   const handleToggleFlowExecution = async (flow) => {
     if (!isAdmin || !flow?.id) return;
     const nextValue = !(flow.isExecutionEnabled !== false);
+    let disableReason = "";
+    if (!nextValue) {
+      disableReason = window.prompt("Reason for disabling this flow:", flow.disableReason || "")?.trim() || "";
+      if (!disableReason) {
+        setMessage({ type: "error", text: "Disable reason is required." });
+        return;
+      }
+    }
     setUpdatingFlowId(flow.id);
     setMessage(null);
     try {
@@ -400,7 +439,7 @@ export default function ConfigurePanel() {
             "Content-Type": "application/json",
             "x-api-key": config.apiKey,
           },
-          body: JSON.stringify({ isExecutionEnabled: nextValue }),
+          body: JSON.stringify({ isExecutionEnabled: nextValue, disableReason }),
         }
       );
       const result = await response.json().catch(() => ({}));
@@ -408,10 +447,18 @@ export default function ConfigurePanel() {
         throw new Error(result?.message || result?.error || `HTTP ${response.status}`);
       }
       setFlows((prev) =>
-        prev.map((f) => (f.id === flow.id ? { ...f, isExecutionEnabled: nextValue } : f))
+        prev.map((f) =>
+          f.id === flow.id
+            ? { ...f, isExecutionEnabled: nextValue, disableReason: nextValue ? null : disableReason }
+            : f
+        )
       );
       setAdminFlows((prev) =>
-        prev.map((f) => (f.id === flow.id ? { ...f, isExecutionEnabled: nextValue } : f))
+        prev.map((f) =>
+          f.id === flow.id
+            ? { ...f, isExecutionEnabled: nextValue, disableReason: nextValue ? null : disableReason }
+            : f
+        )
       );
       setMessage({
         type: "success",
@@ -421,6 +468,46 @@ export default function ConfigurePanel() {
       setMessage({ type: "error", text: `Failed to update execution flag: ${err.message}` });
     } finally {
       setUpdatingFlowId("");
+    }
+  };
+
+  const handleUpdateOrphanPolicy = async (row, nextStatus) => {
+    if (!isAdmin || !row?.id) return;
+    let disableReason = "";
+    if (nextStatus === "disabled") {
+      disableReason = window.prompt("Reason for disabling this orphan flow:", row.disableReason || "")?.trim() || "";
+      if (!disableReason) {
+        setMessage({ type: "error", text: "Disable reason is required for orphan policy." });
+        return;
+      }
+    }
+    setUpdatingOrphanId(String(row.id));
+    setMessage(null);
+    try {
+      const res = await fetch(`${config.apiBaseUrl}/api/flows/orphan-policies/${row.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+          "x-api-key": config.apiKey,
+        },
+        body: JSON.stringify({ status: nextStatus, disableReason }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.message || body?.error || `HTTP ${res.status}`);
+      const syncedScopeKeys = Array.isArray(body?.syncedScopeKeys) ? new Set(body.syncedScopeKeys) : null;
+      setOrphanPolicies((prev) =>
+        prev.map((p) =>
+          ((syncedScopeKeys && syncedScopeKeys.has(p.scopeKey)) || p.id === row.id)
+            ? { ...p, status: nextStatus, disableReason: nextStatus === "disabled" ? disableReason : null }
+            : p
+        )
+      );
+      setMessage({ type: "success", text: `Orphan policy updated to ${nextStatus}.` });
+    } catch (err) {
+      setMessage({ type: "error", text: `Failed to update orphan policy: ${err.message}` });
+    } finally {
+      setUpdatingOrphanId("");
     }
   };
 
@@ -699,12 +786,13 @@ export default function ConfigurePanel() {
                 <thead>
                   <tr className="text-left text-gray-600 border-b">
                     <th className="py-2 pr-4">Flow</th>
-                    <th className="py-2 pr-4">Owner (Email)</th>
-                    <th className="py-2 pr-4">Path</th>
-                    <th className="py-2 pr-4">Execution Enabled</th>
-                    <th className="py-2">Action</th>
-                  </tr>
-                </thead>
+                  <th className="py-2 pr-4">Owner (Email)</th>
+                  <th className="py-2 pr-4">Path</th>
+                  <th className="py-2 pr-4">Execution Enabled</th>
+                  <th className="py-2 pr-4">Disable Reason</th>
+                  <th className="py-2">Action</th>
+                </tr>
+              </thead>
                 <tbody>
                   {filteredAdminFlows.map((flow) => (
                     <tr key={flow.id || flow.path} className="border-b last:border-b-0">
@@ -716,6 +804,7 @@ export default function ConfigurePanel() {
                           {flow.isExecutionEnabled !== false ? "On" : "Off"}
                         </span>
                       </td>
+                      <td className="py-2 pr-4 text-xs text-gray-600">{flow.disableReason || "--"}</td>
                       <td className="py-2">
                         <button
                           type="button"
@@ -729,6 +818,64 @@ export default function ConfigurePanel() {
                               ? "Turn Off"
                               : "Turn On"}
                         </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="bg-white rounded-lg shadow p-5 space-y-3">
+          <h2 className="text-md font-semibold text-purple-700">Orphan Flow Policies (Admin)</h2>
+          {orphanPolicies.length === 0 && <p className="text-sm text-gray-500">No orphaned flows observed yet.</p>}
+          {orphanPolicies.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600 border-b">
+                    <th className="py-2 pr-4">Scope</th>
+                    <th className="py-2 pr-4">Hash</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 pr-4">Reason</th>
+                    <th className="py-2 pr-4">Last Seen</th>
+                    <th className="py-2 pr-4">Runs</th>
+                    <th className="py-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orphanPolicies.map((row) => (
+                    <tr key={row.id} className="border-b last:border-b-0">
+                      <td className="py-2 pr-4" title={String(row.scopeKey || "-")}>
+                        {formatScopeKey(row.scopeKey).label}
+                      </td>
+                      <td className="py-2 pr-4 text-xs text-gray-600">{row.flowHash || "-"}</td>
+                      <td className="py-2 pr-4">{row.status || "-"}</td>
+                      <td className="py-2 pr-4 text-xs text-gray-600">{row.disableReason || "--"}</td>
+                      <td className="py-2 pr-4 text-xs text-gray-600">{row.lastSeenAt || "-"}</td>
+                      <td className="py-2 pr-4">{row.runCount ?? 0}</td>
+                      <td className="py-2">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={updatingOrphanId === String(row.id) || row.status === "approved"}
+                            onClick={() => handleUpdateOrphanPolicy(row, "approved")}
+                            className="px-2 py-1 rounded border bg-white hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={updatingOrphanId === String(row.id) || row.status === "disabled"}
+                            onClick={() => handleUpdateOrphanPolicy(row, "disabled")}
+                            className="px-2 py-1 rounded border bg-white hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            Disable
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
