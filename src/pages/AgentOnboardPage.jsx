@@ -38,6 +38,13 @@ export default function AgentOnboardPage() {
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem("botflows_token");
+            localStorage.removeItem("botflows_userId");
+            const next = encodeURIComponent(`/agent/onboard?nonce=${encodeURIComponent(nonce)}`);
+            navigate(`/login?next=${next}`, { replace: true });
+            return;
+          }
           throw new Error(body?.message || "Failed to link agent.");
         }
         setStatus("Agent linked successfully. You can return to the agent now.");
@@ -59,4 +66,3 @@ export default function AgentOnboardPage() {
     </main>
   );
 }
-
