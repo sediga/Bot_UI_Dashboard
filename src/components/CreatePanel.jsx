@@ -1,6 +1,9 @@
 import StepBuilder from "./StepBuilder";
 import StepList from "./StepList";
 import { useEffect, useMemo, useRef, useState } from "react";
+import WorkflowBuilder from "./WorkflowBuilder";
+import WorkflowNodeList from "./WorkflowNodeList";
+import { createEmptyWorkflowDocument } from "../utils/flowSchema";
 
 export default function CreatePanel(props) {
   const {
@@ -38,6 +41,9 @@ export default function CreatePanel(props) {
   const [isUpgrading, setIsUpgrading] = useState(
     () => localStorage.getItem("flowtra_upgrading") === "1"
   );
+  const [editorMode, setEditorMode] = useState("flow");
+  const [workflowDocument, setWorkflowDocument] = useState(null);
+  const [workflowMeta, setWorkflowMeta] = useState({ flowId: "", flowPath: "" });
 
   // timers/flags
   const triedProtocolRef = useRef(false);
@@ -324,25 +330,66 @@ export default function CreatePanel(props) {
         className="h-full min-w-[200px] max-w-[80%] overflow-auto"
         style={{ width: leftWidth }}
       >
-        <StepBuilder
-          onEnsureWebSocket={ensureWebSocket}
-          isMounted={true}
-          addStep={addStep}
-          clearSteps={clearSteps}
-          steps={steps}
-          updateStepWithImprovedSelector={updateStepWithImprovedSelector}
-          setPickedTarget={setPickedTarget}
-          currentLoopId={currentLoopId}
-          setCurrentLoopId={setCurrentLoopId}
-          setSteps={setSteps}
-          agentStatus={agentStatus}
-          logs={logs}
-          setLogs={setLogs}
-          rawMessages={recordMessages}
-          setRawMessages={setRecordMessages}
-          eventBus={eventBus}
-          sessionDatasets={sessionDatasets}
-        />
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="border-b border-gray-200 bg-white px-4 py-3">
+            <div className="inline-flex rounded-lg border border-gray-300 bg-gray-100 p-1 text-sm">
+              <button
+                type="button"
+                className={`rounded px-3 py-1.5 ${editorMode === "flow" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}
+                onClick={() => setEditorMode("flow")}
+              >
+                Flow Editor
+              </button>
+              <button
+                type="button"
+                className={`rounded px-3 py-1.5 ${editorMode === "workflow" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}
+                onClick={() => {
+                  if (!workflowDocument) {
+                    setWorkflowDocument(createEmptyWorkflowDocument());
+                    setWorkflowMeta({ flowId: "", flowPath: "" });
+                  }
+                  setEditorMode("workflow");
+                }}
+              >
+                Workflow Editor
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1">
+            {editorMode === "flow" ? (
+              <StepBuilder
+                onEnsureWebSocket={ensureWebSocket}
+                isMounted={true}
+                addStep={addStep}
+                clearSteps={clearSteps}
+                steps={steps}
+                updateStepWithImprovedSelector={updateStepWithImprovedSelector}
+                setPickedTarget={setPickedTarget}
+                currentLoopId={currentLoopId}
+                setCurrentLoopId={setCurrentLoopId}
+                setSteps={setSteps}
+                agentStatus={agentStatus}
+                logs={logs}
+                setLogs={setLogs}
+                rawMessages={recordMessages}
+                setRawMessages={setRecordMessages}
+                eventBus={eventBus}
+                sessionDatasets={sessionDatasets}
+              />
+            ) : (
+              <WorkflowBuilder
+                workflowDocument={workflowDocument}
+                setWorkflowDocument={setWorkflowDocument}
+                workflowMeta={workflowMeta}
+                setWorkflowMeta={setWorkflowMeta}
+                agentStatus={agentStatus}
+                logs={logs}
+                setLogs={setLogs}
+              />
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Divider */}
@@ -351,16 +398,23 @@ export default function CreatePanel(props) {
       {/* Right Panel */}
       <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          <StepList
-            steps={steps}
-            setSteps={setSteps}
-            pickedTarget={pickedTarget}
-            setPickedTarget={setPickedTarget}
-            agentStatus={agentStatus}
-            currentLoopId={currentLoopId}
-            setCurrentLoopId={setCurrentLoopId}
-            sessionDatasets={sessionDatasets}
-          />
+          {editorMode === "flow" ? (
+            <StepList
+              steps={steps}
+              setSteps={setSteps}
+              pickedTarget={pickedTarget}
+              setPickedTarget={setPickedTarget}
+              agentStatus={agentStatus}
+              currentLoopId={currentLoopId}
+              setCurrentLoopId={setCurrentLoopId}
+              sessionDatasets={sessionDatasets}
+            />
+          ) : (
+            <WorkflowNodeList
+              workflowDocument={workflowDocument}
+              setWorkflowDocument={setWorkflowDocument}
+            />
+          )}
         </div>
       </div>
     </main>

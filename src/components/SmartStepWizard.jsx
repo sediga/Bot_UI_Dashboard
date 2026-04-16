@@ -13,6 +13,7 @@ import ApiExtractWizard from "./smartsteps/ApiExtractWizard";
 import KeyValueExtractWizard from "./smartsteps/KeyValueExtractWizard";
 import KeyValueCollectWizard from "./smartsteps/KeyValueCollectWizard";
 import AuthGateStep from "./smartsteps/AuthGateStep";
+import SwitchCaseStep from "./smartsteps/SwitchCaseStep";
 
 export default function SmartStepWizard({
   parentId,
@@ -304,6 +305,17 @@ export default function SmartStepWizard({
     />
   );
 
+  const renderSwitchCase = () => (
+    <SwitchCaseStep
+      mode="create"
+      onCreate={(payload) => {
+        onSmartStepCreated?.(payload);
+        onCancel?.();
+      }}
+      onCancel={() => setStep(1)}
+    />
+  );
+
   return (
     <div className="space-y-4 text-sm relative z-10">
       {step === 1 && renderStep1()}
@@ -335,6 +347,7 @@ export default function SmartStepWizard({
       {step === 2 && stepType === "extract-keyvalue" && renderKeyValueExtract()}
       {step === 2 && stepType === "collect-keyvalue" && renderKeyValueCollect()}
       {step === 2 && stepType === "auth-gate" && renderAuthGate()}
+      {step === 2 && stepType === "switch-case" && renderSwitchCase()}
     </div>
   );
 }

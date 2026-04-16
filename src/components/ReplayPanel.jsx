@@ -1,10 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import config from "../config";
 import StatusPanel from "./StatusPanel";
-import { useAuth } from "../contexts/AuthContext";
 import FlowSelector from "./FlowSelector";
-import { getFlowExecutionStatus, listFlows, loadFlow, syncFlowIdMetadata } from "../utils/flowApi";
-import { validateFlowSteps } from "../utils/flowSchema";
+import { getFlowExecutionStatus, listFlows, loadDocument, syncFlowIdMetadata } from "../utils/flowApi";
+import { detectDocumentKind, documentKindLabel, validateReplayDocument } from "../utils/flowSchema";
 
 export default function ReplayPanel({
   onEnsureWebSocket,
@@ -19,11 +18,19 @@ export default function ReplayPanel({
   const [selectedFlow, setSelectedFlow] = useState("");
   const [log, setLog] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [localDocument, setLocalDocument] = useState(null);
+  const [localDocumentMeta, setLocalDocumentMeta] = useState(null);
+  const fileInputRef = useRef(null);
   const token = localStorage.getItem("botflows_token");
-  const { userId } = useAuth();
   // OS Detection (macOS)
   const isMacOS = () => /Mac/i.test(navigator.platform || navigator.userAgent);
   const showMacWarning = isMacOS();
+  const selectedFlowMeta = savedFlows.find((item) => item.path === selectedFlow) || null;
+  const selectedDocumentKind = selectedFlowMeta?.type || "flow";
+  const flowCount = savedFlows.filter((item) => item.type !== "workflow").length;
+  const workflowCount = savedFlows.filter((item) => item.type === "workflow").length;
+  const activeDocumentMeta = localDocumentMeta || selectedFlowMeta;
+  const activeDocumentKind = localDocumentMeta?.kind || selectedDocumentKind;
 
   useEffect(() => {
     if (!rawMessages || rawMessages.length === 0) return;
@@ -62,29 +69,73 @@ export default function ReplayPanel({
     fetchSavedFlows();
   }, [token]);
 
+  const resetLocalDocument = () => {
+    setLocalDocument(null);
+    setLocalDocumentMeta(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleLoadLocalFile = async (event) => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const kind = detectDocumentKind(parsed);
+      if (kind === "unknown") {
+        throw new Error("Unsupported document shape. Expected a flow or workflow JSON document.");
+      }
+      setSelectedFlow("");
+      setLocalDocument(parsed);
+      setLocalDocumentMeta({
+        name: file.name,
+        kind,
+        source: "local",
+      });
+      setLog(`Loaded local ${documentKindLabel(kind).toLowerCase()}: ${file.name}`);
+    } catch (err) {
+      console.error("Failed to load local replay document:", err);
+      setLog("Could not load local JSON: " + (err?.message || "unknown error"));
+      alert(err?.message || "Could not load local JSON.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleReplay = async () => {
-    if (!selectedFlow) return;
+    if (!selectedFlow && !localDocument) return;
     setLogs([]);
 
     try {
-      try {
-        const status = await getFlowExecutionStatus(selectedFlow);
-        if (status?.isExecutionEnabled === false) {
-          setLog(`Replay blocked: ${status?.disableReason || "flow execution is disabled by admin policy."}`);
-          return;
+      let documentData = localDocument;
+      let replayFlowPath = undefined;
+      let replayFlowId = undefined;
+
+      if (!documentData) {
+        try {
+          const status = await getFlowExecutionStatus(selectedFlow);
+          if (status?.isExecutionEnabled === false) {
+            setLog(`Replay blocked: ${status?.disableReason || "flow execution is disabled by admin policy."}`);
+            return;
+          }
+        } catch (statusErr) {
+          console.warn("Execution status precheck unavailable. Continuing replay.", statusErr);
         }
-      } catch (statusErr) {
-        console.warn("Execution status precheck unavailable. Continuing replay.", statusErr);
+
+        documentData = await loadDocument(selectedFlow, {
+          materialize: selectedDocumentKind === "workflow",
+        });
+        replayFlowPath = selectedFlow;
+        replayFlowId = selectedFlowMeta?.id || undefined;
       }
 
-      const flowData = await loadFlow(selectedFlow);
-      const validated = validateFlowSteps(flowData);
+      const validated = validateReplayDocument(documentData);
       if (validated.hasErrors) {
-        setLog("Replay blocked: flow has validation errors. Open Create tab and fix highlighted steps.");
+        const issues = validated.issues?.length ? `\n${validated.issues.join("\n")}` : "";
+        setLog(`Replay blocked: ${documentKindLabel(validated.kind).toLowerCase()} has validation issues.${issues}`);
         return;
       }
 
-      const selectedFlowMeta = savedFlows.find((f) => f.path === selectedFlow) || {};
       const res = await fetch(`${config.agentServerUrl}/api/replay`, {
         method: "POST",
         headers: {
@@ -95,9 +146,9 @@ export default function ReplayPanel({
           "x-api-key": `${config.apiKey}`,
         },
         body: JSON.stringify({
-          steps: validated.steps,
-          flowPath: selectedFlow,
-          flowId: selectedFlowMeta.id || undefined,
+          document: validated.document,
+          flowPath: replayFlowPath,
+          flowId: replayFlowId,
           triggerType: "manual",
         }),
       });
@@ -107,7 +158,7 @@ export default function ReplayPanel({
         const detail = data?.detail || data?.error || `HTTP ${res.status}`;
         throw new Error(detail);
       }
-      setLog("Replay started:\n" + JSON.stringify(data, null, 2));
+      setLog(`${documentKindLabel(validated.kind)} replay started:\n` + JSON.stringify(data, null, 2));
     } catch (err) {
       console.error("Replay failed:", err);
       setLog("Replay failed: " + err.message);
@@ -118,10 +169,10 @@ export default function ReplayPanel({
     if (!selectedFlow || isDownloading) return;
     setIsDownloading(true);
     try {
-      const flowJson = await loadFlow(selectedFlow);
-      const selectedFlowMeta = savedFlows.find((f) => f.path === selectedFlow) || {};
-      const flowId = String(selectedFlowMeta.id || "");
-      if (selectedFlow && flowId) {
+      const document = await loadDocument(selectedFlow);
+      const kind = detectDocumentKind(document);
+      const flowId = String(selectedFlowMeta?.id || "");
+      if (selectedFlow && flowId && kind === "flow") {
         try {
           await syncFlowIdMetadata(selectedFlow, flowId);
         } catch (err) {
@@ -131,7 +182,7 @@ export default function ReplayPanel({
       const flowDoc = {
         flowId,
         flowPath: selectedFlow || undefined,
-        steps: flowJson,
+        document,
       };
 
       // Derive a safe filename: last segment of path, ensure .json
@@ -148,7 +199,7 @@ export default function ReplayPanel({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      setLog(`Downloaded flow: ${filename}`);
+      setLog(`Downloaded ${documentKindLabel(kind).toLowerCase()}: ${filename}`);
     } catch (err) {
       console.error("Download failed:", err);
       setLog("Download failed: " + err.message);
@@ -205,17 +256,69 @@ export default function ReplayPanel({
       )}
 
       {/* Heading */}
-      <h2 className="text-xl font-semibold text-indigo-700">Replay Flow</h2>
+      <h2 className="text-xl font-semibold text-indigo-700">Replay Flow Or Workflow</h2>
 
       {/* Flow Selector */}
       <section className="bg-white shadow rounded-lg p-5 space-y-4">
         <FlowSelector
           value={selectedFlow}
-          onChange={setSelectedFlow}
-          label="Select Flow"
+          onChange={(value) => {
+            resetLocalDocument();
+            setSelectedFlow(value);
+          }}
+          label="Select Document"
           fetchedFlows={savedFlows}
+          placeholder="-- Choose saved flow or workflow --"
         />
-        
+
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>{flowCount} flows | {workflowCount} workflows</span>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-4 py-2 rounded shadow text-sm border bg-white text-gray-800 hover:bg-gray-50"
+            type="button"
+          >
+            Load Local JSON
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleLoadLocalFile}
+          />
+          {localDocument && (
+            <button
+              onClick={resetLocalDocument}
+              className="px-4 py-2 rounded shadow text-sm border bg-white text-gray-800 hover:bg-gray-50"
+              type="button"
+            >
+              Clear Local
+            </button>
+          )}
+        </div>
+
+        {activeDocumentMeta && (
+          <div className="rounded border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+            <div className="font-medium text-slate-900">{activeDocumentMeta.name}</div>
+            <div className="mt-1 text-xs text-slate-600">
+              {documentKindLabel(activeDocumentKind)}
+              {activeDocumentMeta.version != null && activeDocumentMeta.version !== "" ? ` | v${activeDocumentMeta.version}` : ""}
+              {activeDocumentMeta.path ? ` | ${activeDocumentMeta.path}` : ""}
+              {localDocumentMeta ? " | local file" : ""}
+            </div>
+            {activeDocumentKind === "workflow" && (
+              <div className="mt-2 text-xs text-slate-600">
+                {localDocumentMeta
+                  ? "Local workflows can replay only if they already contain resolvedFlow. Saved workflows loaded from the server are materialized automatically."
+                  : "Workflow replay uses API materialization so referenced child flows are stitched into the payload before the agent runs it."}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
           <button
@@ -226,13 +329,13 @@ export default function ReplayPanel({
                 ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                 : "bg-white text-gray-800 hover:bg-gray-50"
             }`}
-            title={!selectedFlow ? "Select a flow to download" : "Download flow JSON"}
+            title={!selectedFlow ? "Select a flow or workflow to download" : "Download document JSON"}
           >
             {isDownloading ? "Downloading..." : "Download JSON"}
           </button>
 
           <button onClick={handleReplay} className="px-4 py-2 bg-purple-600 text-white rounded shadow text-sm">
-            Replay
+            Replay Document
           </button>
         </div>
       </section>

@@ -36,11 +36,25 @@ const defaultConfig = {
     items: [
         {
             enabled: true,
+            headless: true,
             flow: { value: "", enabled: true },
             type: { value: "Manual", enabled: true },       // Manual | Daily | Weekly | CRON
             time: { value: "09:00", enabled: true },
             dayOfWeek: { value: "Monday", enabled: false }, // Only if Weekly
-            cron: { value: "", enabled: false }
+            cron: { value: "", enabled: false },
+            emailTrigger: {
+              provider: "gmail",
+              integrationRef: "gmail_default",
+              mode: "poll",
+              pollIntervalMinutes: 5,
+              lookbackMinutes: 30,
+              gmailQuery: "label:inbox is:unread newer_than:2d",
+              maxMessagesPerPoll: 10,
+              startMode: "single_message",
+              markReadAfterStart: false,
+              applyLabel: "",
+              dedupeKey: "messageId"
+            }
         } 
     ]
   }

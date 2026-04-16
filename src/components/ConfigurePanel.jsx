@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import defaultConfig from "../config/botflows_config";
 import FlowSelector from "./FlowSelector";
 import config from "../config";
@@ -15,6 +15,26 @@ const US_TIMEZONES = [
 ];
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const EMAIL_START_MODES = [
+  { value: "single_message", label: "One flow run per email" },
+  { value: "batch", label: "Single batch run" },
+];
+
+function createEmptyEmailTrigger() {
+  return {
+    provider: "gmail",
+    integrationRef: "gmail_default",
+    mode: "poll",
+    pollIntervalMinutes: 5,
+    lookbackMinutes: 30,
+    gmailQuery: "label:inbox is:unread newer_than:2d",
+    maxMessagesPerPoll: 10,
+    startMode: "single_message",
+    markReadAfterStart: false,
+    applyLabel: "",
+    dedupeKey: "messageId",
+  };
+}
 
 function deepMerge(base, override) {
   if (Array.isArray(base)) return Array.isArray(override) ? override : base;
@@ -42,12 +62,33 @@ function createEmptySchedule(timezone = "America/Chicago") {
   return {
     enabled: true,
     silent: true,
+    headless: true,
     flow: { value: "", enabled: true },
     type: { value: "", enabled: true },
     time: { value: "09:00", enabled: true },
     dayOfWeek: { value: [], enabled: false },
     cron: { value: "", enabled: false },
+    emailTrigger: createEmptyEmailTrigger(),
     timezone,
+  };
+}
+
+function normalizeEmailTrigger(trigger) {
+  const seed = createEmptyEmailTrigger();
+  const merged = { ...seed, ...(trigger && typeof trigger === "object" ? trigger : {}) };
+  return {
+    ...merged,
+    provider: String(merged.provider || "gmail").trim() || "gmail",
+    integrationRef: String(merged.integrationRef || "gmail_default").trim() || "gmail_default",
+    mode: "poll",
+    pollIntervalMinutes: Number(merged.pollIntervalMinutes) > 0 ? Number(merged.pollIntervalMinutes) : seed.pollIntervalMinutes,
+    lookbackMinutes: Number(merged.lookbackMinutes) >= 0 ? Number(merged.lookbackMinutes) : seed.lookbackMinutes,
+    gmailQuery: String(merged.gmailQuery || "").trim() || seed.gmailQuery,
+    maxMessagesPerPoll: Number(merged.maxMessagesPerPoll) > 0 ? Number(merged.maxMessagesPerPoll) : seed.maxMessagesPerPoll,
+    startMode: String(merged.startMode || seed.startMode).trim() || seed.startMode,
+    markReadAfterStart: Boolean(merged.markReadAfterStart),
+    applyLabel: String(merged.applyLabel || "").trim(),
+    dedupeKey: String(merged.dedupeKey || seed.dedupeKey).trim() || seed.dedupeKey,
   };
 }
 
@@ -63,6 +104,11 @@ function normalizeScheduleItem(item, timezone) {
     time: toField(item.time, "09:00"),
     dayOfWeek: toField(item.dayOfWeek, []),
     cron: toField(item.cron, ""),
+    emailTrigger: normalizeEmailTrigger(item.emailTrigger),
+    headless:
+      typeof item.headless === "object" && item.headless !== null && "value" in item.headless
+        ? item.headless.value
+        : Boolean(item.headless ?? item.silent ?? true),
     silent:
       typeof item.silent === "object" && item.silent !== null && "value" in item.silent
         ? item.silent.value
@@ -78,6 +124,7 @@ function sanitizeSchedule(raw, timezone) {
   const timeValue = String(normalized.time?.value || "").trim();
   const cronValue = String(normalized.cron?.value || "").trim();
   const days = Array.isArray(normalized.dayOfWeek?.value) ? normalized.dayOfWeek.value : [];
+  const emailTrigger = normalizeEmailTrigger(normalized.emailTrigger);
 
   return {
     ...normalized,
@@ -86,6 +133,7 @@ function sanitizeSchedule(raw, timezone) {
     time: { value: typeValue === "cron" ? "" : timeValue, enabled: typeValue !== "cron" },
     cron: { value: typeValue === "cron" ? cronValue : "", enabled: typeValue === "cron" },
     dayOfWeek: { value: typeValue === "weekly" ? days : [], enabled: typeValue === "weekly" },
+    emailTrigger,
   };
 }
 
@@ -114,8 +162,15 @@ export default function ConfigurePanel() {
   const [adminOwnerFilter, setAdminOwnerFilter] = useState("all");
   const [flowNameMap, setFlowNameMap] = useState({});
   const [message, setMessage] = useState(null);
+  const [gmailSetup, setGmailSetup] = useState(null);
+  const [gmailDraft, setGmailDraft] = useState({ enabled: false, mailboxAddress: "" });
+  const [gmailClientFileName, setGmailClientFileName] = useState("");
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailSaving, setGmailSaving] = useState(false);
+  const [gmailMessage, setGmailMessage] = useState(null);
   const [updatingFlowId, setUpdatingFlowId] = useState("");
   const [updatingOrphanId, setUpdatingOrphanId] = useState("");
+  const gmailFileInputRef = useRef(null);
 
   const schedulesHash = useMemo(() => JSON.stringify(schedules), [schedules]);
   const isDirty = schedulesHash !== baselineSchedulesHash;
@@ -152,6 +207,31 @@ export default function ConfigurePanel() {
   const token = localStorage.getItem("botflows_token") || "";
   const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 
+  const fetchGmailSetup = async () => {
+    setGmailLoading(true);
+    setGmailMessage(null);
+    try {
+      const res = await fetch(`${config.agentServerUrl}/api/integrations/email/gmail`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setGmailSetup(data);
+      setGmailDraft({
+        enabled: Boolean(data?.enabled),
+        mailboxAddress: String(data?.mailboxAddress || ""),
+      });
+      setGmailClientFileName("");
+    } catch (err) {
+      console.error("Failed to load Gmail setup:", err);
+      setGmailSetup(null);
+      setGmailMessage({
+        type: "error",
+        text: "Could not reach the local agent for Gmail setup. Make sure the Flowtra Agent is running on this machine.",
+      });
+    } finally {
+      setGmailLoading(false);
+    }
+  };
+
   const setLoadedSchedules = (items) => {
     const next = Array.isArray(items) ? items : [];
     setSchedules(next);
@@ -164,17 +244,24 @@ export default function ConfigurePanel() {
     const timeValue = String(candidate.time?.value || "").trim();
     const cronValue = String(candidate.cron?.value || "").trim();
     const selectedDays = Array.isArray(candidate.dayOfWeek?.value) ? candidate.dayOfWeek.value : [];
+    const emailTrigger = normalizeEmailTrigger(candidate.emailTrigger);
 
     if (!flowValue || !typeValue) return "Flow and schedule type are required.";
     if ((typeValue === "daily" || typeValue === "weekly") && !timeValue) return "Time is required for daily/weekly schedules.";
     if (typeValue === "weekly" && selectedDays.length === 0) return "Select at least one day for a weekly schedule.";
     if (typeValue === "cron" && !cronValue) return "CRON expression is required.";
+    if (typeValue === "email") {
+      if (!gmailSetup?.isConnected) return "Connect Gmail on this machine before adding an email trigger.";
+      if (!String(emailTrigger.gmailQuery || "").trim()) return "Gmail query is required for an email trigger.";
+      if (!(Number(emailTrigger.pollIntervalMinutes) > 0)) return "Poll interval must be greater than 0 minutes.";
+      if (!(Number(emailTrigger.maxMessagesPerPoll) > 0)) return "Max messages per poll must be greater than 0.";
+    }
 
     const duplicate = schedules.some((item, index) => {
       if (excludeIndex !== null && index === excludeIndex) return false;
-      return item.flow?.value === flowValue;
+      return item.flow?.value === flowValue && item.type?.value === typeValue;
     });
-    if (duplicate) return "A schedule already exists for this flow.";
+    if (duplicate) return "A schedule of this type already exists for this flow.";
 
     return "";
   };
@@ -201,6 +288,10 @@ export default function ConfigurePanel() {
       setLoadedSchedules([]);
     }
   }, [timezone]);
+
+  useEffect(() => {
+    fetchGmailSetup();
+  }, []);
 
   useEffect(() => {
     const fetchFlows = async () => {
@@ -302,6 +393,21 @@ export default function ConfigurePanel() {
   }, [timezone]);
 
   const scheduleType = newSchedule.type?.value || "";
+
+  const describeSchedule = (schedule) => {
+    const typeValue = String(schedule?.type?.value || "").trim();
+    if (typeValue === "daily") return schedule?.time?.value || "--";
+    if (typeValue === "weekly") {
+      const days = Array.isArray(schedule?.dayOfWeek?.value) ? schedule.dayOfWeek.value.join(", ") : "--";
+      return `${days || "--"} at ${schedule?.time?.value || "--"}`;
+    }
+    if (typeValue === "cron") return schedule?.cron?.value || "--";
+    if (typeValue === "email") {
+      const trigger = normalizeEmailTrigger(schedule?.emailTrigger);
+      return `Poll every ${trigger.pollIntervalMinutes}m, ${trigger.startMode === "batch" ? "batch" : "single email"}, query: ${trigger.gmailQuery || "--"}`;
+    }
+    return "--";
+  };
 
   const getFlowDisplayName = (val) => {
     const flowPath = val?.value || "";
@@ -471,6 +577,167 @@ export default function ConfigurePanel() {
     }
   };
 
+  const handleSaveGmailSetup = async () => {
+    setGmailSaving(true);
+    setGmailMessage(null);
+    try {
+      const response = await fetch(`${config.agentServerUrl}/api/integrations/email/gmail`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: Boolean(gmailDraft.enabled),
+          mailboxAddress: String(gmailDraft.mailboxAddress || "").trim(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.message || result?.details || `HTTP ${response.status}`);
+      }
+      const next = result?.gmail || null;
+      setGmailSetup(next);
+      setGmailDraft({
+        enabled: Boolean(next?.enabled),
+        mailboxAddress: String(next?.mailboxAddress || ""),
+      });
+      setGmailClientFileName("");
+      setGmailMessage({ type: "success", text: result?.message || "Gmail setup saved locally." });
+    } catch (err) {
+      console.error("Failed to save Gmail setup:", err);
+      setGmailMessage({ type: "error", text: `Failed to save Gmail setup: ${err.message}` });
+    } finally {
+      setGmailSaving(false);
+    }
+  };
+
+  const handleResetGmailSetup = async () => {
+    const ok = window.confirm("Reset Gmail setup on this player?");
+    if (!ok) return;
+
+    setGmailSaving(true);
+    setGmailMessage(null);
+    try {
+      const response = await fetch(`${config.agentServerUrl}/api/integrations/email/gmail`, {
+        method: "DELETE",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || result?.details || `HTTP ${response.status}`);
+      const next = result?.gmail || null;
+      setGmailSetup(next);
+      setGmailDraft({
+        enabled: Boolean(next?.enabled),
+        mailboxAddress: String(next?.mailboxAddress || ""),
+      });
+      setGmailClientFileName("");
+      setGmailMessage({ type: "success", text: result?.message || "Gmail setup reset." });
+    } catch (err) {
+      console.error("Failed to reset Gmail setup:", err);
+      setGmailMessage({ type: "error", text: `Failed to reset Gmail setup: ${err.message}` });
+    } finally {
+      setGmailSaving(false);
+    }
+  };
+
+  const handleOpenAgentEmailSettings = async () => {
+    try {
+      const response = await fetch(`${config.agentServerUrl}/api/open-email-settings`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setGmailMessage({ type: "success", text: "Opened local agent email settings on this machine." });
+    } catch (err) {
+      console.error("Failed to open agent email settings:", err);
+      setGmailMessage({ type: "error", text: "Could not open local agent email settings." });
+    }
+  };
+
+  const handleUploadGmailClientJson = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setGmailSaving(true);
+    setGmailMessage(null);
+    try {
+      const clientConfigJson = await file.text();
+      const response = await fetch(`${config.agentServerUrl}/api/integrations/email/gmail/client-config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientConfigJson }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.detail || result?.message || `HTTP ${response.status}`);
+      setGmailSetup(result?.gmail || null);
+      setGmailClientFileName(file.name);
+      setGmailMessage({ type: "success", text: result?.message || "Gmail client file stored locally." });
+    } catch (err) {
+      console.error("Failed to upload Gmail client file:", err);
+      setGmailMessage({ type: "error", text: `Failed to store Gmail client file: ${err.message}` });
+    } finally {
+      if (gmailFileInputRef.current) gmailFileInputRef.current.value = "";
+      setGmailSaving(false);
+    }
+  };
+
+  const handleConnectGmail = async () => {
+    setGmailSaving(true);
+    setGmailMessage(null);
+    try {
+      const response = await fetch(`${config.agentServerUrl}/api/integrations/email/gmail/connect`, {
+        method: "POST",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.detail || result?.message || `HTTP ${response.status}`);
+      setGmailSetup(result?.gmail || null);
+      setGmailMessage({ type: "success", text: result?.message || "Gmail connected successfully." });
+    } catch (err) {
+      console.error("Failed to connect Gmail:", err);
+      setGmailMessage({ type: "error", text: `Failed to connect Gmail: ${err.message}` });
+    } finally {
+      setGmailSaving(false);
+    }
+  };
+
+  const handleTestGmail = async () => {
+    setGmailSaving(true);
+    setGmailMessage(null);
+    try {
+      const response = await fetch(`${config.agentServerUrl}/api/integrations/email/gmail/test`, {
+        method: "POST",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.detail || result?.message || `HTTP ${response.status}`);
+      setGmailSetup(result?.gmail || null);
+      const mailbox = result?.profile?.emailAddress ? ` (${result.profile.emailAddress})` : "";
+      setGmailMessage({ type: "success", text: `${result?.message || "Gmail test succeeded."}${mailbox}` });
+    } catch (err) {
+      console.error("Failed to test Gmail:", err);
+      setGmailMessage({ type: "error", text: `Failed to test Gmail: ${err.message}` });
+    } finally {
+      setGmailSaving(false);
+    }
+  };
+
+  const handleDisconnectGmail = async () => {
+    const ok = window.confirm("Disconnect Gmail on this player?");
+    if (!ok) return;
+
+    setGmailSaving(true);
+    setGmailMessage(null);
+    try {
+      const response = await fetch(`${config.agentServerUrl}/api/integrations/email/gmail/disconnect`, {
+        method: "POST",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.detail || result?.message || `HTTP ${response.status}`);
+      setGmailSetup(result?.gmail || null);
+      setGmailMessage({ type: "success", text: result?.message || "Gmail disconnected." });
+    } catch (err) {
+      console.error("Failed to disconnect Gmail:", err);
+      setGmailMessage({ type: "error", text: `Failed to disconnect Gmail: ${err.message}` });
+    } finally {
+      setGmailSaving(false);
+    }
+  };
+
   const handleUpdateOrphanPolicy = async (row, nextStatus) => {
     if (!isAdmin || !row?.id) return;
     let disableReason = "";
@@ -513,9 +780,20 @@ export default function ConfigurePanel() {
 
   const renderScheduleEditor = (value, onChange) => {
     const typeValue = value.type?.value || "";
+    const emailTrigger = normalizeEmailTrigger(value.emailTrigger);
+
+    const updateEmailTrigger = (patch) =>
+      onChange({
+        ...value,
+        emailTrigger: normalizeEmailTrigger({
+          ...emailTrigger,
+          ...patch,
+        }),
+      });
 
     return (
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5 items-start">
+      <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5 items-start">
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700">Run Background</label>
           <div className="h-11 flex items-center">
@@ -523,6 +801,17 @@ export default function ConfigurePanel() {
               type="checkbox"
               checked={Boolean(value.silent)}
               onChange={(e) => onChange({ ...value, silent: e.target.checked })}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Run Headless</label>
+          <div className="h-11 flex items-center">
+            <input
+              type="checkbox"
+              checked={Boolean(value.headless ?? value.silent ?? true)}
+              onChange={(e) => onChange({ ...value, headless: e.target.checked })}
             />
           </div>
         </div>
@@ -566,6 +855,7 @@ export default function ConfigurePanel() {
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="cron">CRON</option>
+            <option value="email">Email Trigger</option>
           </select>
         </div>
 
@@ -612,7 +902,7 @@ export default function ConfigurePanel() {
           </div>
         )}
 
-        {typeValue !== "cron" && (
+        {(typeValue === "daily" || typeValue === "weekly") && (
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">Time (HH:mm)</label>
             <input
@@ -621,6 +911,118 @@ export default function ConfigurePanel() {
               value={value.time?.value || ""}
               onChange={(e) => onChange({ ...value, time: { value: e.target.value, enabled: true } })}
             />
+          </div>
+        )}
+      </div>
+
+        {typeValue === "email" && (
+          <div className="rounded border border-amber-200 bg-amber-50 p-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-medium text-gray-800">Email Trigger Configuration</div>
+                <div className="text-xs text-gray-600">
+                  This flow will be started by agent-side Gmail polling instead of cron time.
+                </div>
+              </div>
+              <span
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                  gmailSetup?.isConnected ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {gmailSetup?.isConnected ? "Gmail connected on this machine" : "Gmail connection required"}
+              </span>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 items-start">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Provider</label>
+                <input type="text" className="border p-2 w-full rounded h-11 bg-gray-50" value="Gmail" readOnly />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Poll Every (Minutes)</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="border p-2 w-full rounded h-11"
+                  value={emailTrigger.pollIntervalMinutes}
+                  onChange={(e) => updateEmailTrigger({ pollIntervalMinutes: Number(e.target.value || 0) })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Lookback (Minutes)</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="border p-2 w-full rounded h-11"
+                  value={emailTrigger.lookbackMinutes}
+                  onChange={(e) => updateEmailTrigger({ lookbackMinutes: Number(e.target.value || 0) })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Max Messages Per Poll</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="border p-2 w-full rounded h-11"
+                  value={emailTrigger.maxMessagesPerPoll}
+                  onChange={(e) => updateEmailTrigger({ maxMessagesPerPoll: Number(e.target.value || 0) })}
+                />
+              </div>
+
+              <div className="space-y-2 xl:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Gmail Query</label>
+                <input
+                  type="text"
+                  className="border p-2 w-full rounded h-11"
+                  value={emailTrigger.gmailQuery}
+                  onChange={(e) => updateEmailTrigger({ gmailQuery: e.target.value })}
+                  placeholder="label:inbox is:unread newer_than:2d"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Start Mode</label>
+                <select
+                  className="border p-2 w-full rounded h-11"
+                  value={emailTrigger.startMode}
+                  onChange={(e) => updateEmailTrigger({ startMode: e.target.value })}
+                >
+                  {EMAIL_START_MODES.map((mode) => (
+                    <option key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Apply Label</label>
+                <input
+                  type="text"
+                  className="border p-2 w-full rounded h-11"
+                  value={emailTrigger.applyLabel}
+                  onChange={(e) => updateEmailTrigger({ applyLabel: e.target.value })}
+                  placeholder="flowtra-processed"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(emailTrigger.markReadAfterStart)}
+                  onChange={(e) => updateEmailTrigger({ markReadAfterStart: e.target.checked })}
+                />
+                Mark email read after the flow is successfully queued
+              </label>
+              <div className="text-xs text-gray-600">
+                Matched emails will later be deduped by <span className="font-medium">{emailTrigger.dedupeKey}</span>.
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -658,6 +1060,194 @@ export default function ConfigurePanel() {
       )}
 
       <section className="bg-white rounded-lg shadow p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-md font-semibold text-purple-700">Email Integration Setup</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Save the local Gmail mailbox setup on this player so email-enabled flows can validate that this machine is prepared.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={fetchGmailSetup}
+            className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            disabled={gmailLoading}
+          >
+            {gmailLoading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        {gmailMessage && (
+          <div
+            className={`rounded border px-4 py-3 text-sm ${
+              gmailMessage.type === "error"
+                ? "border-red-300 bg-red-50 text-red-700"
+                : "border-green-300 bg-green-50 text-green-700"
+            }`}
+          >
+            {gmailMessage.text}
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded border border-gray-200 bg-gray-50 p-4 space-y-2">
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Provider:</span> Gmail
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Access Mode:</span>{" "}
+              {gmailSetup?.authModeLabel || "Flowtra-managed Gmail API desktop OAuth"}
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Setup Status:</span>{" "}
+              <span className={gmailSetup?.isConfigured ? "text-emerald-700" : "text-amber-700"}>
+                {gmailSetup?.statusLabel || "Not configured"}
+              </span>
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Connected Mailbox:</span>{" "}
+              {gmailSetup?.connectedEmail || gmailSetup?.mailboxAddress || "Not connected"}
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Connected At:</span>{" "}
+              {gmailSetup?.connectedAt || "Not connected"}
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">OAuth Client:</span>{" "}
+              {gmailSetup?.clientConfigLabel || (gmailSetup?.clientConfigStored ? "Stored locally" : "Not available")}
+            </div>
+            <div className="text-sm">
+              <span className="font-medium text-gray-700">Mailbox Token:</span>{" "}
+              {gmailSetup?.tokenStored ? "Present" : "Not connected"}
+            </div>
+            <div className="text-xs text-gray-500 pt-1">
+              {gmailSetup?.statusHint ||
+                "Complete local mailbox setup before running any flow that uses Gmail read/draft steps."}
+            </div>
+          </div>
+
+          <div className="rounded border border-gray-200 bg-white p-4 space-y-3">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={gmailDraft.enabled}
+                onChange={(e) => setGmailDraft((prev) => ({ ...prev, enabled: e.target.checked }))}
+              />
+              Enable Gmail integration on this machine
+            </label>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mailbox Address</label>
+              <input
+                type="email"
+                className="w-full rounded border p-2 text-sm"
+                value={gmailDraft.mailboxAddress}
+                onChange={(e) => setGmailDraft((prev) => ({ ...prev, mailboxAddress: e.target.value }))}
+                placeholder="shared-inbox@facility.org"
+              />
+            </div>
+
+            {gmailSetup?.usesBundledClientConfig ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Google App Credential</label>
+                <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                  Bundled with this Flowtra Agent build
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desktop OAuth Client JSON</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => gmailFileInputRef.current?.click()}
+                    className="px-4 py-2 rounded border border-gray-300 bg-white text-gray-700"
+                    disabled={gmailSaving}
+                  >
+                    Choose File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => gmailFileInputRef.current?.click()}
+                    className="px-4 py-2 rounded bg-indigo-600 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    disabled={gmailSaving}
+                  >
+                    Upload To Agent
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    {gmailClientFileName || (gmailSetup?.clientConfigStored ? "Stored locally on this machine" : "No file selected")}
+                  </span>
+                </div>
+                <input
+                  ref={gmailFileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={handleUploadGmailClientJson}
+                />
+              </div>
+            )}
+
+            <div className="text-xs text-gray-500">
+              {gmailSetup?.usesBundledClientConfig
+                ? "Save the local mailbox setup here, then connect Gmail. Gmail filters, polling windows, and processing behavior still belong in the email flow steps."
+                : "Save the local mailbox setup and upload the Flowtra-managed Google desktop OAuth client JSON here. Gmail filters, polling windows, and processing behavior still belong in the email flow steps."}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSaveGmailSetup}
+                disabled={gmailSaving}
+                className="px-4 py-2 rounded bg-indigo-600 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {gmailSaving ? "Saving..." : "Save Gmail Setup"}
+              </button>
+              <button
+                type="button"
+                onClick={handleConnectGmail}
+                disabled={gmailSaving || !gmailSetup?.canConnect}
+                className="px-4 py-2 rounded bg-emerald-600 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Connect Gmail
+              </button>
+              <button
+                type="button"
+                onClick={handleTestGmail}
+                disabled={gmailSaving || !gmailSetup?.tokenStored}
+                className="px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-50"
+              >
+                Test Connection
+              </button>
+              <button
+                type="button"
+                onClick={handleDisconnectGmail}
+                disabled={gmailSaving || !gmailSetup?.tokenStored}
+                className="px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-50"
+              >
+                Disconnect
+              </button>
+              <button
+                type="button"
+                onClick={handleResetGmailSetup}
+                disabled={gmailSaving}
+                className="px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-50"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenAgentEmailSettings}
+                className="px-4 py-2 rounded border border-gray-300 bg-white text-gray-700"
+              >
+                Open Agent Email Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-lg shadow p-5 space-y-4">
         {renderScheduleEditor(newSchedule, setNewSchedule)}
 
         <div>
@@ -678,11 +1268,10 @@ export default function ConfigurePanel() {
               <thead>
                 <tr className="text-left text-gray-600 border-b">
                   <th className="py-2 pr-4">Background</th>
+                  <th className="py-2 pr-4">Headless</th>
                   <th className="py-2 pr-4">Flow</th>
                   <th className="py-2 pr-4">Type</th>
-                  <th className="py-2 pr-4">Days</th>
-                  <th className="py-2 pr-4">Time</th>
-                  <th className="py-2 pr-4">CRON</th>
+                  <th className="py-2 pr-4">Schedule Details</th>
                   <th className="py-2">Actions</th>
                 </tr>
               </thead>
@@ -691,15 +1280,10 @@ export default function ConfigurePanel() {
                   <Fragment key={`group-${index}`}>
                     <tr key={`row-${index}`} className="border-b last:border-b-0">
                       <td className="py-2 pr-4">{sched.silent ? "Yes" : "No"}</td>
+                      <td className="py-2 pr-4">{(sched.headless ?? sched.silent ?? true) ? "Yes" : "No"}</td>
                       <td className="py-2 pr-4">{getFlowDisplayName(sched.flow)}</td>
                       <td className="py-2 pr-4">{sched.type?.value || "--"}</td>
-                      <td className="py-2 pr-4">
-                        {Array.isArray(sched.dayOfWeek?.value) && sched.dayOfWeek.value.length > 0
-                          ? sched.dayOfWeek.value.join(", ")
-                          : "--"}
-                      </td>
-                      <td className="py-2 pr-4">{sched.time?.value || "--"}</td>
-                      <td className="py-2 pr-4">{sched.cron?.value || "--"}</td>
+                      <td className="py-2 pr-4 max-w-[460px] text-xs text-gray-600">{describeSchedule(sched)}</td>
                       <td className="py-2">
                         <div className="flex items-center gap-3">
                           <button className="text-indigo-600 hover:underline" onClick={() => handleStartEdit(index)}>
@@ -717,7 +1301,7 @@ export default function ConfigurePanel() {
 
                     {editingIndex === index && editingSchedule && (
                       <tr key={`edit-${index}`} className="bg-gray-50 border-b">
-                        <td className="py-3" colSpan={7}>
+                        <td className="py-3" colSpan={6}>
                           <div className="px-2 space-y-3">
                             {renderScheduleEditor(editingSchedule, setEditingSchedule)}
                             <div className="flex justify-end gap-3">

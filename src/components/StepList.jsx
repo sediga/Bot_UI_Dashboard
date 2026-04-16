@@ -50,12 +50,13 @@ export default function StepList({
   const [redoStack, setRedoStack] = useState([]);
   const internalHistoryMutationRef = useRef(false);
   // --- generic container model (any container can nest any container) ---
-  const CONTAINER_TYPES = new Set(["loop", "dataLoop", "counterloop", "navigate"]);
+  const CONTAINER_TYPES = new Set(["loop", "dataLoop", "counterloop", "navigate", "switchCase"]);
   const isContainer = (s) => !!s && CONTAINER_TYPES.has(s.type);
   const STEP_TYPES = [
     "uiAction",
     "navigate",
     "authGate",
+    "switchCase",
     "gridExtract",
     "apiExtract",
     "importData",
@@ -668,6 +669,11 @@ const updateStep = (id, patch) =>
     // parent to whichever container is active
     if (currentContainerId) {
       step.parentId = currentContainerId;
+      const parent = steps.find((s) => s.id === currentContainerId);
+      if (parent?.type === "switchCase" && !step.caseId) {
+        const firstCaseId = parent.cases?.[0]?.id;
+        if (firstCaseId) step.caseId = firstCaseId;
+      }
     }
 
     commitSteps(prev => [...prev, step], "Add step");
@@ -947,6 +953,7 @@ const updateStep = (id, patch) =>
     t === "dataLoop"     ? "Data Loop" :
     t === "counterloop"  ? "Counter Loop" :
     t === "loop"         ? "Loop" :
+    t === "switchCase"   ? "Switch Case" :
     "Container";
 
   const badgeClass = (t) => {
@@ -956,6 +963,7 @@ const updateStep = (id, patch) =>
     if (t === "dataLoop")    return `${base} bg-emerald-100 text-emerald-700`;
     if (t === "counterloop") return `${base} bg-amber-100 text-amber-700`;
     if (t === "loop")        return `${base} bg-sky-100 text-sky-700`;
+    if (t === "switchCase")  return `${base} bg-fuchsia-100 text-fuchsia-700`;
     return `${base} bg-slate-100 text-slate-700`;
   };
 
@@ -974,6 +982,7 @@ const updateStep = (id, patch) =>
       step.name,
       step.message,
       step.value,
+      step.caseId,
       step.waitForUrlContains,
       step.timeoutMs,
       step.pollMs,
@@ -1032,6 +1041,12 @@ const updateStep = (id, patch) =>
       (currentContainerId === step.id || finishEnabledIds.has(step.id));
     const hasValidationErrors = Array.isArray(step.validationErrors) && step.validationErrors.length > 0;
     const stepTypeKey = getTypeKey(step);
+    const parentSwitchCase = step.parentId
+      ? steps.find((s) => s.id === step.parentId && s.type === "switchCase")
+      : null;
+    const caseLabel = parentSwitchCase && step.caseId
+      ? (parentSwitchCase.cases || []).find((c) => c.id === step.caseId)?.label || step.caseId
+      : "";
 
     const columnsForThisStep = (() => {
       if (!dataLoopAncestor) return [];
@@ -1252,6 +1267,11 @@ const updateStep = (id, patch) =>
                     Uses secret reference.
                   </div>
                 )}
+                {caseLabel && (
+                  <div className="mt-1 text-[11px] text-fuchsia-700">
+                    Branch: <code>{caseLabel}</code>
+                  </div>
+                )}
               </div>
           )}
 
@@ -1289,6 +1309,20 @@ const updateStep = (id, patch) =>
                     >
                       {step.type === "navigate" ? "Finish Recording" : "Finish Loop Recording"}
                     </button>
+                  </div>
+                )}
+                {step.type === "switchCase" && Array.isArray(step.cases) && step.cases.length > 0 && (
+                  <div className="mt-2 rounded border border-fuchsia-200 bg-fuchsia-50 px-2 py-2 text-xs text-fuchsia-900">
+                    <div className="font-semibold mb-1">Cases</div>
+                    <ul className="space-y-1">
+                      {step.cases.map((item) => (
+                        <li key={item.id}>
+                          <strong>{item.label || item.id}</strong>
+                          {item.urlContains ? ` -> url contains "${item.urlContains}"` : ""}
+                          {item.isDefault ? " (default)" : ""}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
                 
@@ -1740,6 +1774,7 @@ const updateStep = (id, patch) =>
             <option value="uiaction">UI Action</option>
             <option value="navigate">Navigate</option>
             <option value="authgate">Auth Gate</option>
+            <option value="switchcase">Switch Case</option>
             <option value="gridextract">Grid Extract</option>
             <option value="apiextract">API Extract</option>
             <option value="importdata">Import Data</option>
@@ -1863,7 +1898,7 @@ const updateStep = (id, patch) =>
           (() => {
             const s = steps.find(st => st.id === editingStepId);
             const SMART_TYPES = new Set([
-              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract","keyValueExtract","keyValueCollect","authGate"
+              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract","keyValueExtract","keyValueCollect","authGate","switchCase"
             ]);
             return SMART_TYPES.has(s?.type)
               ? (

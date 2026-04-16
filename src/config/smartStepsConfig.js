@@ -153,6 +153,14 @@ const SMART_STEP_CONFIG = [
         disabled: false
       },
       {
+        id: "switch-case",
+        title: "Switch Case",
+        description: "Run different child steps based on the current URL.",
+        type: "switchCase",
+        fields: ["stepName", "cases"],
+        disabled: false
+      },
+      {
         id: "if-block",
         title: "If Block (coming soon)",
         description: "Run steps based on a condition.",

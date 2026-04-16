@@ -214,6 +214,15 @@ function StepEditorModalInner({ step, onClose, onSave }) {
             placeholder="(optional)"
           />
         </Field>
+        {(draft.caseId !== undefined || draft.parentId != null) && (
+          <Field label="Case ID (optional)">
+            <Text
+              defaultValue={draft.caseId ?? ""}
+              onBufferedChange={(v) => put("caseId", v)}
+              placeholder="case_xxx"
+            />
+          </Field>
+        )}
       </div>
 
       {/* Type-specific sections */}

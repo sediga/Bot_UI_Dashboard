@@ -1,8 +1,29 @@
 // components/FlowSelector.jsx
 import { useState, useEffect } from "react";
 import config from "../config";
+import { documentKindLabel } from "../utils/flowSchema";
 
-export default function FlowSelector({ value, onChange, label = "Select Flow", className = "", showLabel = true, fetchedFlows = null}) {
+function normalizeDocumentType(value) {
+  return String(value || "").toLowerCase() === "workflow" ? "workflow" : "flow";
+}
+
+function formatOptionLabel(flow) {
+  const kind = documentKindLabel(normalizeDocumentType(flow?.type));
+  const version = flow?.version != null && flow?.version !== "" ? ` v${flow.version}` : "";
+  return `[${kind}] ${flow?.name || "Untitled"}${version}`;
+}
+
+export default function FlowSelector({
+  value,
+  onChange,
+  label = "Select Flow",
+  className = "",
+  showLabel = true,
+  fetchedFlows = null,
+  placeholder = "-- Choose saved flow --",
+  allowedTypes = null,
+  showMeta = true,
+}) {
   const [flows, setFlows] = useState([]);
   const token = localStorage.getItem("botflows_token");
 
@@ -40,6 +61,16 @@ export default function FlowSelector({ value, onChange, label = "Select Flow", c
     fetchFlows();
   }, [token, fetchedFlows]);
 
+  const allowed = Array.isArray(allowedTypes) && allowedTypes.length
+    ? new Set(allowedTypes.map((item) => normalizeDocumentType(item)))
+    : null;
+  const visibleFlows = allowed
+    ? flows.filter((flow) => allowed.has(normalizeDocumentType(flow?.type)))
+    : flows;
+  const selectedFlow = visibleFlows.find((flow) => flow.path === value) || flows.find((flow) => flow.path === value) || null;
+  const selectedType = normalizeDocumentType(selectedFlow?.type);
+  const selectedVersion = selectedFlow?.version != null && selectedFlow?.version !== "" ? `v${selectedFlow.version}` : "";
+
   return (
     <div className={className}>
       {showLabel && <label className="block font-medium text-gray-700 mb-1">{label}</label>}
@@ -48,13 +79,20 @@ export default function FlowSelector({ value, onChange, label = "Select Flow", c
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 border rounded text-sm"
       >
-        <option value="">-- Choose saved flow --</option>
-        {flows.map((flow) => (
+        <option value="">{placeholder}</option>
+        {visibleFlows.map((flow) => (
           <option key={flow.path} value={flow.path}>
-            {flow.name}
+            {formatOptionLabel(flow)}
           </option>
         ))}
       </select>
+      {showMeta && selectedFlow && (
+        <div className="mt-2 text-xs text-gray-500">
+          <span className="font-medium text-gray-700">{documentKindLabel(selectedType)}</span>
+          {selectedVersion ? ` | ${selectedVersion}` : ""}
+          {selectedFlow.path ? ` | ${selectedFlow.path}` : ""}
+        </div>
+      )}
     </div>
   );
 }

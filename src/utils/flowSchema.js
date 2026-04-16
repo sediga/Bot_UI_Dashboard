@@ -1,4 +1,4 @@
-const CONTAINER_TYPES = new Set(["navigate", "loop", "counterloop", "dataLoop"]);
+const CONTAINER_TYPES = new Set(["navigate", "loop", "counterloop", "dataLoop", "switchCase"]);
 const SMART_TYPES = new Set([
   "gridExtract",
   "importData",
@@ -9,6 +9,7 @@ const SMART_TYPES = new Set([
   "dataLoop",
   "counterloop",
   "navigate",
+  "switchCase",
 ]);
 
 function makeStepId(index) {
@@ -20,6 +21,33 @@ function makeStepId(index) {
 
 function asArray(v) {
   return Array.isArray(v) ? v : [];
+}
+
+export function detectDocumentKind(rawDocument) {
+  if (Array.isArray(rawDocument)) return "flow";
+  if (!rawDocument || typeof rawDocument !== "object") return "unknown";
+  if (rawDocument.type === "workflow" && Array.isArray(rawDocument.nodes)) return "workflow";
+  if (Array.isArray(rawDocument.steps)) return "flow";
+  return "unknown";
+}
+
+export function isWorkflowDocument(rawDocument) {
+  return detectDocumentKind(rawDocument) === "workflow";
+}
+
+export function documentKindLabel(value) {
+  const kind = value === "flow" || value === "workflow" ? value : detectDocumentKind(value);
+  if (kind === "workflow") return "Workflow";
+  if (kind === "flow") return "Flow";
+  return "Document";
+}
+
+export function extractFlowSteps(rawDocument) {
+  if (Array.isArray(rawDocument)) return rawDocument;
+  if (rawDocument && typeof rawDocument === "object" && Array.isArray(rawDocument.steps)) {
+    return rawDocument.steps;
+  }
+  return [];
 }
 
 function normalizeSelectorList(step) {
@@ -95,6 +123,10 @@ function isValidUrl(v) {
   }
 }
 
+function hasTemplateToken(v) {
+  return /{{\s*[^}]+\s*}}/.test(String(v || ""));
+}
+
 export function validateStep(step, ctx) {
   const errors = [];
   const type = String(step.type || "");
@@ -102,7 +134,8 @@ export function validateStep(step, ctx) {
   if (!step.id) errors.push("Missing step id.");
 
   if (type === "navigate") {
-    if (!step.url || !isValidUrl(String(step.url))) {
+    const url = String(step.url || "");
+    if (!url || (!isValidUrl(url) && !hasTemplateToken(url))) {
       errors.push("Navigate step requires a valid URL.");
     }
   }
@@ -120,6 +153,15 @@ export function validateStep(step, ctx) {
       errors.push("Data Loop requires source step id.");
     } else if (ctx?.idSet && !ctx.idSet.has(src)) {
       errors.push(`Data Loop source step does not exist: ${src}`);
+    }
+  }
+
+  if (type === "switchCase") {
+    const cases = asArray(step.cases);
+    if (!cases.length) {
+      errors.push("Switch Case requires at least one case.");
+    } else if (!cases.some((c) => String(c?.urlContains || "").trim() || c?.isDefault)) {
+      errors.push("Switch Case needs a URL match or a default case.");
     }
   }
 
@@ -153,6 +195,162 @@ export function validateFlowSteps(rawSteps) {
   });
 
   return { steps: validated, hasErrors };
+}
+
+export function validateWorkflowDocument(rawDocument) {
+  const issues = [];
+  if (!rawDocument || typeof rawDocument !== "object" || Array.isArray(rawDocument)) {
+    issues.push("Workflow must be a JSON object.");
+    return issues;
+  }
+
+  const nodes = rawDocument.nodes;
+  if (!Array.isArray(nodes) || !nodes.length) {
+    issues.push("Workflow must contain a non-empty 'nodes' array.");
+    return issues;
+  }
+
+  const startNodeId = String(rawDocument.startNodeId || "").trim();
+  if (!startNodeId) {
+    issues.push("Workflow is missing 'startNodeId'.");
+  }
+
+  const seenIds = new Set();
+  const nodeIds = new Set();
+
+  nodes.forEach((node, index) => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) {
+      issues.push(`Node ${index + 1} must be an object.`);
+      return;
+    }
+
+    const nodeId = String(node.id || "").trim();
+    if (!nodeId) {
+      issues.push(`Node ${index + 1} is missing 'id'.`);
+    } else {
+      if (seenIds.has(nodeId)) issues.push(`Duplicate workflow node id '${nodeId}'.`);
+      seenIds.add(nodeId);
+      nodeIds.add(nodeId);
+    }
+
+    if (!String(node.type || "").trim()) {
+      issues.push(`Node ${nodeId || index + 1} is missing 'type'.`);
+    }
+  });
+
+  if (startNodeId && !nodeIds.has(startNodeId)) {
+    issues.push(`Workflow startNodeId '${startNodeId}' does not reference a valid node.`);
+  }
+
+  nodes.forEach((node, index) => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return;
+
+    const nodeId = String(node.id || index + 1);
+    const nodeType = String(node.type || "").toLowerCase();
+    if (nodeType === "switchvalue") {
+      const cases = asArray(node.switch?.cases);
+      if (!cases.length) {
+        issues.push(`Workflow node '${nodeId}' must define switch.cases.`);
+      }
+      cases.forEach((item, caseIndex) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return;
+        const targetId = String(item.targetId || "").trim();
+        if (targetId && !nodeIds.has(targetId)) {
+          issues.push(`Workflow node '${nodeId}' switch case ${caseIndex + 1} points to missing node '${targetId}'.`);
+        }
+      });
+      return;
+    }
+
+    asArray(node.routes).forEach((route, routeIndex) => {
+      if (!route || typeof route !== "object" || Array.isArray(route)) return;
+      const targetId = String(route.targetId || "").trim();
+      if (targetId && !nodeIds.has(targetId)) {
+        issues.push(`Workflow node '${nodeId}' route ${routeIndex + 1} points to missing node '${targetId}'.`);
+      }
+    });
+  });
+
+  return issues;
+}
+
+export function createEmptyWorkflowDocument() {
+  return {
+    id: `wf_${Date.now()}`,
+    type: "workflow",
+    name: "New Workflow",
+    version: 1,
+    enabled: true,
+    startNodeId: "node_start",
+    context: {},
+    nodes: [
+      {
+        id: "node_start",
+        type: "end",
+        name: "Start / End",
+        result: {
+          status: "completed",
+          reason: "Workflow initialized.",
+        },
+      },
+    ],
+  };
+}
+
+export function validateReplayDocument(rawDocument) {
+  const kind = detectDocumentKind(rawDocument);
+
+  if (kind === "workflow") {
+    const issues = validateWorkflowDocument(rawDocument);
+    asArray(rawDocument?.nodes).forEach((node, index) => {
+      if (!node || typeof node !== "object" || Array.isArray(node)) return;
+      const nodeType = String(node.type || "").toLowerCase();
+      if (nodeType !== "runflow") return;
+      if (node.resolvedFlow == null) {
+        const nodeId = String(node.id || index + 1);
+        issues.push(
+          `Workflow node '${nodeId}' is missing resolvedFlow. Load a saved workflow from Replay so the API can materialize it first.`
+        );
+      }
+    });
+    return {
+      kind,
+      hasErrors: issues.length > 0,
+      issues,
+      document: rawDocument,
+    };
+  }
+
+  if (kind === "flow") {
+    const sourceSteps = extractFlowSteps(rawDocument);
+    const validated = validateFlowSteps(sourceSteps);
+    const issues = [];
+
+    validated.steps.forEach((step, index) => {
+      asArray(step.validationErrors).forEach((message) => {
+        issues.push(`Step ${index + 1}: ${message}`);
+      });
+    });
+
+    const document = Array.isArray(rawDocument)
+      ? validated.steps
+      : { ...rawDocument, steps: validated.steps };
+
+    return {
+      kind,
+      hasErrors: validated.hasErrors,
+      issues,
+      document,
+      steps: validated.steps,
+    };
+  }
+
+  return {
+    kind: "unknown",
+    hasErrors: true,
+    issues: ["Unsupported document shape. Expected a flow or workflow JSON document."],
+    document: rawDocument,
+  };
 }
 
 export function toFlowPayload(steps) {
