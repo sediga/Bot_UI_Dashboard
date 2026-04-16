@@ -406,6 +406,54 @@ function StepEditorModalInner({ step, onClose, onSave }) {
         </div>
       )}
 
+      {type === "emailCreateDraft" && (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Field label="Provider">
+            <Text readOnly defaultValue={draft.provider || "gmail"} />
+          </Field>
+          <Field label="Draft Mode">
+            <Text readOnly defaultValue={draft.draftMode || "reply"} />
+          </Field>
+          <Field label="To Override">
+            <Text defaultValue={draft.to ?? ""} onBufferedChange={(v) => put("to", v)} />
+          </Field>
+          <Field label="Subject Override">
+            <Text defaultValue={draft.subject ?? ""} onBufferedChange={(v) => put("subject", v)} />
+          </Field>
+          <Field label="Cc">
+            <Text defaultValue={draft.cc ?? ""} onBufferedChange={(v) => put("cc", v)} />
+          </Field>
+          <Field label="Bcc">
+            <Text defaultValue={draft.bcc ?? ""} onBufferedChange={(v) => put("bcc", v)} />
+          </Field>
+          <Field label="Attachment Base Folder">
+            <Text
+              defaultValue={draft.attachmentFolderPath ?? ""}
+              onBufferedChange={(v) => put("attachmentFolderPath", v)}
+            />
+          </Field>
+          <Field label="Subject ID Regex">
+            <Text
+              defaultValue={draft.subjectIdPattern ?? ""}
+              onBufferedChange={(v) => put("subjectIdPattern", v)}
+            />
+          </Field>
+          <div className="md:col-span-2">
+            <Field label="Draft Body">
+              <TextArea
+                rows={8}
+                defaultValue={draft.bodyText ?? draft.body ?? draft.text ?? ""}
+                onBufferedChange={(v) => {
+                  put("bodyText", v);
+                  put("body", v);
+                }}
+                placeholder="Supports tokens like {{row.subject}}"
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+
       {type === "exportData" && (
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Source Step ID or Name">

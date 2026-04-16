@@ -10,6 +10,7 @@ const SMART_TYPES = new Set([
   "counterloop",
   "navigate",
   "switchCase",
+  "emailCreateDraft",
 ]);
 
 function makeStepId(index) {
@@ -173,6 +174,15 @@ export function validateStep(step, ctx) {
   if (type === "apiExtract") {
     if (!step.request?.url) errors.push("API Extract requires request.url.");
     if (!asArray(step.columnMappings).length) errors.push("API Extract should include column mappings.");
+  }
+
+  if (type === "emailCreateDraft") {
+    if (!String(step.bodyText || step.body || step.text || "").trim()) {
+      errors.push("Email Draft requires body text.");
+    }
+    if (String(step.attachmentFolderPath || "").trim() && !String(step.subjectIdPattern || "").trim()) {
+      errors.push("Email Draft attachment matching requires subjectIdPattern.");
+    }
   }
 
   return errors;

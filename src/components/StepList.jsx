@@ -1898,7 +1898,7 @@ const updateStep = (id, patch) =>
           (() => {
             const s = steps.find(st => st.id === editingStepId);
             const SMART_TYPES = new Set([
-              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract","keyValueExtract","keyValueCollect","authGate","switchCase"
+              "gridExtract","dataLoop","counterloop","exportData","importData","navigate","apiExtract","keyValueExtract","keyValueCollect","authGate","switchCase","emailCreateDraft"
             ]);
             return SMART_TYPES.has(s?.type)
               ? (

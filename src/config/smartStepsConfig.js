@@ -169,6 +169,21 @@ const SMART_STEP_CONFIG = [
         disabled: true
       }
     ]
+  },
+  {
+    category: "Communication",
+    emoji: "ðŸ“§",
+    steps: [
+      {
+        id: "email-draft",
+        title: "Reply as Draft",
+        description: "Create a Gmail draft reply from the triggered email.",
+        emoji: "ðŸ“¨",
+        type: "emailCreateDraft",
+        fields: ["stepName", "to", "cc", "bcc", "subject", "bodyText"],
+        disabled: false
+      }
+    ]
   }
 ];
 
