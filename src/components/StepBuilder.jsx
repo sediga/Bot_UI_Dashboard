@@ -12,7 +12,7 @@ import {
   saveFlow,
   syncFlowIdMetadata,
 } from "../utils/flowApi";
-import { normalizeStep, toFlowPayload, validateFlowSteps } from "../utils/flowSchema";
+import { detectDocumentKind, normalizeStep, toFlowPayload, validateFlowSteps } from "../utils/flowSchema";
 
 export default function StepBuilder({
   onEnsureWebSocket,
@@ -71,7 +71,8 @@ export default function StepBuilder({
     setIsFetchingFlows(true);
     try {
       const data = await listFlows();
-      setAvailableFlows(Array.isArray(data) ? data : []);
+      const next = Array.isArray(data) ? data.filter((item) => String(item?.type || "flow").toLowerCase() !== "workflow") : [];
+      setAvailableFlows(next);
     } catch (err) {
       console.error("Failed to load flows:", err);
       setAvailableFlows([]);
@@ -275,6 +276,11 @@ useEffect(() => {
             // ---- keep your existing loop-specific enrichment ----
             if (currentLoopIdRef.current) {
               step.parentId = currentLoopIdRef.current;
+              const parent = steps.find((s) => s.id === currentLoopIdRef.current);
+              if (parent?.type === "switchCase" && !step.caseId) {
+                const firstCaseId = parent.cases?.[0]?.id;
+                if (firstCaseId) step.caseId = firstCaseId;
+              }
 
               if (isSmartColumnClick) {
                 step.columnIndex = payload.columnIndex;
@@ -600,18 +606,33 @@ const loadFlow = async (selectedFlow) => {
   };
 
   const applyLoadedSteps = (payload) => {
-    const isArray = Array.isArray(payload);
-    const isObjectWithSteps = payload && typeof payload === "object" && Array.isArray(payload.steps);
-    if (!isArray && !isObjectWithSteps) throw new Error("Invalid flow JSON: expected steps[] or { steps: [] }");
-    const sourceSteps = isArray ? payload : payload.steps;
+    const hasWrappedDocument = payload && typeof payload === "object" && !Array.isArray(payload) &&
+      (Array.isArray(payload.document) || (payload.document && typeof payload.document === "object"));
+    const documentPayload = hasWrappedDocument ? payload.document : payload;
+    const documentKind = detectDocumentKind(documentPayload);
+
+    if (documentKind === "workflow") {
+      throw new Error(
+        "This JSON is a workflow document. The Create Flow tab only edits plain flows. Use the Replay tab to view or run workflows."
+      );
+    }
+
+    const isArray = Array.isArray(documentPayload);
+    const isObjectWithSteps = documentPayload && typeof documentPayload === "object" && Array.isArray(documentPayload.steps);
+    if (!isArray && !isObjectWithSteps) {
+      throw new Error("Invalid flow JSON: expected steps[] or { steps: [] }.");
+    }
+
+    const sourceSteps = isArray ? documentPayload : documentPayload.steps;
     const validated = validateFlowSteps(sourceSteps);
     clearSteps();
     validated.steps.forEach((s) => addStep(s));
     setValidationSummary(validated.hasErrors ? "Loaded JSON has validation issues. Review highlighted steps." : "");
-    if (isObjectWithSteps) {
+    if (isObjectWithSteps || hasWrappedDocument) {
+      const metaSource = hasWrappedDocument ? payload : documentPayload;
       setLoadedFlowMeta({
-        flowId: String(payload.flowId || payload.id || ""),
-        flowPath: String(payload.flowPath || ""),
+        flowId: String(metaSource.flowId || documentPayload.flowId || documentPayload.id || ""),
+        flowPath: String(metaSource.flowPath || documentPayload.flowPath || ""),
       });
     } else {
       setLoadedFlowMeta({ flowId: "", flowPath: "" });
@@ -635,7 +656,7 @@ const loadFlow = async (selectedFlow) => {
       applyLoadedSteps(data);
     } catch (err) {
       console.error(err);
-      alert("Could not load this JSON file. Expected an array of steps.");
+      alert(err?.message || "Could not load this JSON file.");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }

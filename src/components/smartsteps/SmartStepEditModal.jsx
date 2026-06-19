@@ -11,6 +11,8 @@ import ApiExtractWizard from "./ApiExtractWizard";
 import KeyValueExtractWizard from "./KeyValueExtractWizard";
 import KeyValueCollectWizard from "./KeyValueCollectWizard";
 import AuthGateStep from "./AuthGateStep";
+import SwitchCaseStep from "./SwitchCaseStep";
+import EmailDraftStep from "./EmailDraftStep";
 
 /**
  * SmartStepEditModal
@@ -138,6 +140,24 @@ export default function SmartStepEditModal({
           loginStepIds: Array.isArray(step.loginStepIds) ? step.loginStepIds : [],
           waitMs: step.waitMs || 8000,
           pollMs: step.pollMs || 250,
+        };
+      case "switchCase":
+        return {
+          id: step.id,
+          stepName: step.name || "Switch Case",
+          cases: Array.isArray(step.cases) ? step.cases : [],
+        };
+      case "emailCreateDraft":
+        return {
+          id: step.id,
+          stepName: step.name || "Reply as Draft",
+          to: step.to || "",
+          cc: step.cc || "",
+          bcc: step.bcc || "",
+          subject: step.subject || "",
+          bodyText: step.bodyText || step.body || step.text || "",
+          attachmentFolderPath: step.attachmentFolderPath || "",
+          subjectIdPattern: step.subjectIdPattern || "",
         };
       default:
         return {};
@@ -280,6 +300,24 @@ export default function SmartStepEditModal({
         mode="edit"
         initial={initial}
         availableSteps={allSteps}
+        onCreate={applyAndSave}
+        onCancel={onClose}
+      />
+    );
+  } else if (type === "switchCase") {
+    body = (
+      <SwitchCaseStep
+        mode="edit"
+        initial={initial}
+        onCreate={applyAndSave}
+        onCancel={onClose}
+      />
+    );
+  } else if (type === "emailCreateDraft") {
+    body = (
+      <EmailDraftStep
+        mode="edit"
+        initial={initial}
         onCreate={applyAndSave}
         onCancel={onClose}
       />
