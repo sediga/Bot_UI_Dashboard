@@ -97,15 +97,6 @@ export default function TopBanner({
 
           {showMenu && (
             <div className="flex flex-wrap gap-3">
-              <a
-                href="https://flowtra.app"
-                className="rounded-lg border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Flowtra.app
-              </a>
-
               <Link
                 to="/in/healthcare"
                 className="rounded-lg border border-emerald-300 px-4 py-2 font-medium text-emerald-700 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
