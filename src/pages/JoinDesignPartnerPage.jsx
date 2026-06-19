@@ -93,11 +93,21 @@ export default function JoinDesignPartnerPage() {
   if (state.ok) return <SuccessScreen />;
 
   return (
-    <div style={{ paddingTop: "var(--header-offset)" }}>
+    <div>
       <div className="flex flex-col">
         <main className="flex-grow">
           <SectionWithBackground>
-            <TopBanner />
+            <section className="bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.14),_transparent_30%),linear-gradient(180deg,_#f8fafc_0%,_#ffffff_52%,_#f8fafc_100%)]">
+              <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8">
+                <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_center,_rgba(34,211,238,0.18),_rgba(15,23,42,0.96)_58%,_rgba(2,6,23,1)_100%)] p-6 shadow-[0_40px_120px_-48px_rgba(15,23,42,0.8)] sm:p-8">
+                  <img
+                    src="/assets/flowtra-healthcare-hero.png"
+                    alt="Flowtra Healthcare brand banner with the tagline Reducing Delays. Preventing Leakage. Enabling Seamless Discharge."
+                    className="mx-auto h-auto max-h-[460px] w-full max-w-5xl object-contain"
+                  />
+                </div>
+              </div>
+            </section>
 
             {/* Hero */}
             <section className="bg-gradient-to-b from-slate-50 to-white">

@@ -20,6 +20,7 @@ import Docs from "./pages/Docs";
 import CheckEmailPage from "./pages/CheckEmailPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import AgentOnboardPage from "./pages/AgentOnboardPage";
+import HealthcareIndiaPage from "./pages/HealthcareIndiaPage";
 import config from "./config";
 
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID || window.__GA_MEASUREMENT_ID__ || "";
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="/join-design-partner" element={<JoinDesignPartnerPage />} />
         <Route path="/guest" element={<GuestStart />} />
         <Route path="/learn-more" element={<DesignPartnerLearnMore />} />
+        <Route path="/in/healthcare" element={<HealthcareIndiaPage />} />
         <Route path="/docs" element={<Docs />} />
       </Routes>
 
